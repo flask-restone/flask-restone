@@ -1,5 +1,3 @@
-from __future__ import division
-
 import calendar
 import collections
 import datetime
@@ -8,7 +6,7 @@ import inspect
 import operator
 import re
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import timezone
 from functools import partial, wraps
 from importlib import import_module
 from math import ceil
@@ -17,8 +15,7 @@ from types import MethodType
 
 import aniso8601
 from flask import _app_ctx_stack, _request_ctx_stack
-from flask import current_app
-from flask import json, jsonify, make_response, request
+from flask import current_app,json, jsonify, make_response, request
 from flask.signals import Namespace
 from flask_sqlalchemy import Pagination as SAPagination
 from jsonschema import Draft4Validator, FormatChecker, ValidationError
@@ -29,19 +26,14 @@ from sqlalchemy.orm import aliased, class_mapper
 from sqlalchemy.orm.attributes import ScalarObjectAttributeImpl
 from sqlalchemy.orm.collections import InstrumentedList
 from sqlalchemy.orm.exc import NoResultFound
-from werkzeug.exceptions import (
-    BadRequest,
-    Conflict,
-    HTTPException,
-    InternalServerError,
-    NotFound,
-    UnsupportedMediaType,
-)
+from werkzeug.exceptions import HTTPException
 from werkzeug.http import HTTP_STATUS_CODES
 from werkzeug.urls import url_parse
 from werkzeug.utils import cached_property
-from werkzeug.wrappers import Response as BaseResponse
+from werkzeug.wrappers import Response
 
+# 
+# ---------------------------HTTP常量--------------------
 HTTP_METHODS = ("GET", "PUT", "POST", "PATCH", "DELETE")
 HTTP_METHOD_VERB_DEFAULTS = {
     "GET": "read",
@@ -50,6 +42,8 @@ HTTP_METHOD_VERB_DEFAULTS = {
     "PATCH": "update",
     "DELETE": "destroy",
 }
+
+# ---------------------------信号量--------------------
 _restone = Namespace()
 before_create = _restone.signal("before-create")
 after_create = _restone.signal("after-create")
@@ -63,12 +57,9 @@ before_remove_from_relation = _restone.signal("before-remove-from-relation")
 after_remove_from_relation = _restone.signal("after-remove-from-relation")
 
 
+# ---------------------------异常----------------------
 class RestoneException(Exception):
-    werkzeug_exception = InternalServerError
-
-    @property
-    def status_code(self):
-        return self.werkzeug_exception.code
+    status_code = 500
 
     def as_dict(self):
         if self.args:
@@ -84,7 +75,7 @@ class RestoneException(Exception):
 
 
 class ItemNotFound(RestoneException):
-    werkzeug_exception = NotFound
+    status_code = 404
 
     def __init__(self, resource, where=None, id=None):
         super(ItemNotFound, self).__init__()
@@ -117,11 +108,11 @@ class ItemNotFound(RestoneException):
 
 
 class RequestMustBeJSON(RestoneException):
-    werkzeug_exception = UnsupportedMediaType
+    status_code = 415
 
 
 class RestoneValidationError(RestoneException):
-    werkzeug_exception = BadRequest
+    status_code = 400
 
     def __init__(self, errors, root=None, schema_uri="#"):
         super(RestoneValidationError, self).__init__()
@@ -152,7 +143,7 @@ class RestoneValidationError(RestoneException):
 
 
 class DuplicateKey(RestoneException):
-    werkzeug_exception = Conflict
+    status_code = 409
 
     def __init__(self, **kwargs):
         super(DuplicateKey, self).__init__()
@@ -160,7 +151,7 @@ class DuplicateKey(RestoneException):
 
 
 class BackendConflict(RestoneException):
-    werkzeug_exception = Conflict
+    status_code = 409
 
     def __init__(self, **kwargs):
         super(BackendConflict, self).__init__()
@@ -173,13 +164,14 @@ class BackendConflict(RestoneException):
 
 
 class PageNotFound(RestoneException):
-    werkzeug_exception = NotFound
+    status_code = 404
 
 
 class InvalidJSON(RestoneException):
-    werkzeug_exception = BadRequest
+    status_code = 400
 
 
+# ---------------------------请求与响应格式----------------------
 class Schema:  # schema 就是规则格式，子类需实现 schema 语法和 format 格式化方法
     def schema(self):  # 二元组就是 rsp,rqs
         raise NotImplementedError()
@@ -259,13 +251,11 @@ class ResourceBound:  # 资源绑定插件
 
     def rebind(self, resource):  # 重新绑定
         raise NotImplementedError(
-            "{} is already bound to {} and does not support rebinding to {}".format(
-                repr(self), self.resource, resource
-            )
+            "{} is already bound to {} and does not support rebinding to {}".format(repr(self), self.resource, resource)
         )
 
 
-class SchemaImpl(Schema):  # 简化格式实现
+class _SchemaDummy(Schema):  # 简化格式实现
     def __init__(self, schema):
         self._schema = schema
 
@@ -324,12 +314,12 @@ class FieldSet(Schema, ResourceBound):  # 字段集 规则和资源绑定
     def readable_fields(self):  # 可读字段
         return {key: field for (key, field) in self.fields.items() if "r" in field.io}
 
-    def schema(self):  # 为何多此一举 fixme
+    def schema(self):
         return self._schema()
 
     @cached_property
     def patchable(self):  # 可更新性的schema
-        return SchemaImpl(self._schema(True))
+        return _SchemaDummy(self._schema(True))
 
     @cached_property
     def all_fields_optional(self):  # 可选的字段
@@ -407,259 +397,13 @@ class FieldSet(Schema, ResourceBound):  # 字段集 规则和资源绑定
         )
 
 
-def _bind_schema(schema, resource) -> Schema:  # 将规则与资源绑定
+def _bind_schema(schema, resource) -> Schema:  # 将格式与资源绑定
     if isinstance(schema, ResourceBound):
         return schema.bind(resource)
     return schema
 
 
-def _route_decorator(method):  # 路由装饰器
-    def decorator(cls, *args, **kwargs):
-        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
-            return cls(method, args[0])  # 没有关键字参数只有一个位置参数的视图函数
-            # 这个位置参数就是路由endpoint 如 /instances
-        return lambda f: cls(method, f, *args, **kwargs)  # 返回函数 返回的是路由类
-
-    decorator.__name__ = method
-    return classmethod(decorator)
-
-
-class Route:
-    def __init__(
-        self,
-        method=None,
-        view_func=None,
-        rule=None,
-        attribute=None,
-        rel=None,
-        title=None,
-        description=None,
-        schema=None,
-        response_schema=None,
-        format_response=True,
-        success_code=None,
-    ):
-        self.rel = rel  # 关系
-        self.rule = rule  # 规则
-        self.method = method  # get/post
-        self.attribute = attribute  # 属性？
-        self.title = title  # 标题？网页标题
-        self.description = description  # 网页描述？
-        self.view_func = view_func  # 视图函数
-        self.format_response = format_response  # 是否格式化响应
-        self.success_code = success_code  # 状态码
-        annotations = getattr(view_func, "__annotations__", None)  # 获取视图函数的标注
-        if isinstance(annotations, dict) and len(annotations):
-            self.request_schema = FieldSet(
-                {name: field for (name, field) in annotations.items() if name != "return"}
-            )  # 请求的语法就是参数名和参数字段类型的字段集，响应也有字段
-            self.response_schema = annotations.get("return", response_schema)
-        else:  # 没有标注则要指定参数
-            self.request_schema = schema
-            self.response_schema = response_schema
-        self._related_routes = ()  # 相关的路由
-        for method in HTTP_METHODS:
-            setattr(self, method, MethodType(_method_decorator(method), self))
-            setattr(self, method.lower(), getattr(self, method))  # 忽略大小写GET成为装饰器
-
-    @property
-    def relation(self):  # 关系型数据资源
-        if self.rel:
-            return self.rel  # 关联字符串 read_status?
-
-        verb = HTTP_METHOD_VERB_DEFAULTS.get(self.method, self.method.lower())
-        return to_camel_case("{}_{}".format(verb, self.attribute))
-
-    def schema_factory(self, resource):  # 规则工厂 将路由的请求与响应规则绑定到资源上
-        request_schema = _bind_schema(self.request_schema, resource)
-        response_schema = _bind_schema(self.response_schema, resource)
-        schema = OrderedDict(
-            [
-                ("rel", self.relation),  # 关联
-                (
-                    "href",
-                    url_rule_to_uri_pattern(self.rule_factory(resource, relative=False)),
-                ),
-                ("method", self.method),
-            ]
-        )
-        if self.title:
-            schema["title"] = self.title
-        if self.description:
-            schema["description"] = self.description
-        if request_schema:
-            schema["schema"] = request_schema.request  # 请求格式的请求部分
-        if response_schema:
-            schema["targetSchema"] = response_schema.response  # 响应格式的响应部分
-        return schema
-
-    def for_method(
-        self,
-        method,
-        view_func,
-        rel=None,
-        title=None,
-        description=None,
-        schema=None,
-        response_schema=None,
-        **kwargs
-    ):
-        attribute = kwargs.pop("attribute", self.attribute)
-        format_response = kwargs.pop("format_response", self.format_response)
-        instance = self.__class__(
-            method,
-            view_func,
-            rule=self.rule,
-            rel=rel,
-            title=title,
-            description=description,
-            schema=schema,
-            response_schema=response_schema,
-            attribute=attribute,
-            format_response=format_response,
-            **kwargs
-        )
-        instance._related_routes = self._related_routes + (self,)
-        return instance
-
-    # 存在了__get__的方法的类称之为描述符类
-    # descriptor 的实例自己访问自己是不会触发__get__ ，而会触发__call__，
-    # 只有 descriptor 作为其它类的属性的时候才会触发 __get___
-    def __get__(self, obj, owner):  # 返回的是个视图函数或类，obj是自己的对象，ower是自己的所属类
-        if obj is None:
-            return self
-        return lambda *args, **kwargs: self.view_func.__call__(obj, *args, **kwargs)
-
-    def __repr__(self):
-        return "{}({})".format(self.__class__.__name__, repr(self.rule))
-
-    @property
-    def request_schema(self):
-        return self.schema  # 先调用了setter方法所以存在
-
-    @request_schema.setter
-    def request_schema(self, schema):
-        self.schema = schema
-
-    def rule_factory(self, resource, relative=False):  # 规则工厂
-        rule = self.rule  # 规则是个字符串
-        if rule is None:
-            rule = "/{}".format(attribute_to_route_uri(self.attribute))
-            # self.attribute 可以关联到资源属性和rule二选一
-            # Route.get('/status') 是 rule
-            # Route.get(attribute='status') 是属性
-        elif callable(rule):  # 规则可以调用资源
-            rule = rule(resource)
-        if relative or resource.route_prefix is None:
-            return rule[1:]
-        return "".join((resource.route_prefix, rule))
-
-    def view_factory(self, name, resource):  # 视图工厂
-        request_schema = _bind_schema(self.request_schema, resource)
-        response_schema = _bind_schema(self.response_schema, resource)
-        view_func = self.view_func
-
-        def view(*args, **kwargs):
-            instance = resource()  # 资源实例
-            if isinstance(request_schema, (FieldSet, Instances)):  # 请求字段集和实例集
-                kwargs.update(request_schema.parse_request(request))  # 上文实现了
-            elif isinstance(request_schema, Schema):  # 普通的格式
-                args += (request_schema.parse_request(request),)  # 为何是元组？
-            response = view_func(instance, *args, **kwargs)
-            if not isinstance(response, tuple) and self.success_code:
-                response = (response, self.success_code)
-            if response_schema is None or not self.format_response:
-                return response
-            else:
-                return response_schema.format_response(response)  # 格式化
-
-        return view
-
-
-for method in HTTP_METHODS:
-    setattr(Route, method.lower(), _route_decorator(method))
-    setattr(Route, method, _route_decorator(method))
-
-
-class ItemRoute(Route):  # 单个记录
-    def rule_factory(self, resource, relative=False):
-        rule = self.rule
-        id_matcher = "<{}:id>".format(resource.meta.id_converter)
-        if rule is None:
-            rule = "/{}".format(attribute_to_route_uri(self.attribute))
-        elif callable(rule):
-            rule = rule(resource)
-        if relative or resource.route_prefix is None:
-            return rule[1:]
-        return "".join((resource.route_prefix, "/", id_matcher, rule))
-
-    def view_factory(self, name, resource):
-        original_view = super(ItemRoute, self).view_factory(name, resource)
-
-        def view(*args, **kwargs):
-            id = kwargs.pop("id")
-            item = resource.manager.read(id)
-            return original_view(item, *args, **kwargs)
-
-        return view
-
-
-class RouteSet:
-    def routes(self):
-        return ()
-
-
-def _field_from_object(parent, cls_or_instance):  # 从对象获取字段
-    if isinstance(cls_or_instance, type):
-        container = cls_or_instance()  # 类的实例
-    else:
-        container = cls_or_instance  # 实例
-    if not isinstance(container, Schema):  # 实例不是格式类
-        raise RuntimeError(
-            "{} expected Raw or Schema, but got {}".format(parent, container.__class__.__name__)
-        )
-    if not isinstance(container, Raw):  # 实例不是Raw类是Schema类
-        container = Raw(container)  # 用Raw类包裹
-    return container
-
-
-class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由，todo 咋用
-    def __init__(self, cls_or_instance, io=None, attribute=None):
-        self.field = _field_from_object(ItemAttributeRoute, cls_or_instance)
-        self.attribute = attribute
-        self.io = io
-
-    def routes(self):
-        io = self.io or self.field.io
-        field = self.field
-        route = ItemRoute(attribute=self.attribute)
-        attribute = field.attribute or route.attribute
-        if "r" in io:  # 读属性的路由
-
-            def read_attribute(resource, item):
-                return get_value(attribute, item, field.default)
-
-            yield route.for_method(
-                "GET",
-                read_attribute,
-                response_schema=field,
-                rel=to_camel_case("read_{}".format(route.attribute)),
-            )
-        if "u" in io:  # 更新属性的路由
-
-            def update_attribute(resource, item, value):
-                item = resource.manager.update(item, {attribute: value})
-                return get_value(attribute, item, field.default)
-
-            yield route.for_method(
-                "POST",
-                update_attribute,
-                schema=field,
-                response_schema=field,
-                rel=to_camel_case("update_{}".format(route.attribute)),
-            )
-
-
+# ----------------字段格式------------
 class Raw(Schema):
     def __init__(
         self,
@@ -671,42 +415,41 @@ class Raw(Schema):
         title=None,
         description=None,
     ):
-        self._schema = schema
-        self._default = default
-        self.attribute = attribute
-        self.nullable = nullable
-        self.title = title
-        self.description = description
-        self.io = io
+        self._schema = schema # 字段格式
+        self._default = default # 字段默认
+        self.attribute = attribute # 名称
+        self.nullable = nullable # 可为空
+        self.title = title # 标题
+        self.description = description # 描述
+        self.io = io # 读写
 
-    def _finalize_schema(self, schema, io):
+    def _finalize_schema(self, schema, io):  # 单个字典
         schema = dict(schema)
         if self.io == "r" and "r" in io:
             schema["readOnly"] = True
-        if "null" in schema.get("type", []):
+        if "null" in schema.get("type", []): # type 就是类型
             self.nullable = True
         elif self.nullable:
             if "enum" in schema and None not in schema["enum"]:
+                # 可以为空且枚举列表里没null
                 schema["enum"].append(None)
             if "type" in schema:
-                type_ = schema["type"]
+                type_ = schema["type"] # 类型是字符串或字典 json 里只有三种
                 if isinstance(type_, (str, dict)):
                     schema["type"] = [type_, "null"]
                 else:
-                    schema["type"].append("null")
-            if "anyOf" in schema:
+                    schema["type"].append("null") # 是列表
+            if "anyOf" in schema: # 
                 if not any(("null" in choice.get("type", []) for choice in schema["anyOf"])):
                     schema["anyOf"].append({"type": "null"})
             elif "oneOf" in schema:
                 if not any(("null" in choice.get("type", []) for choice in schema["oneOf"])):
                     schema["oneOf"].append({"type": "null"})
             elif "type" not in schema:
-                if len(schema) == 1 and "$ref" in schema:
+                if len(schema) == 1 and "$ref" in schema: # 只有一个ref
                     schema = {"anyOf": [schema, {"type": "null"}]}
                 else:
-                    current_app.logger.warn(
-                        '{} is nullable but "null" type cannot be added'.format(self)
-                    )
+                    current_app.logger.warn('{} is nullable but "null" type cannot be added'.format(self))
         for attr in ("default", "title", "description"):
             value = getattr(self, attr)
             if value is not None:
@@ -729,7 +472,7 @@ class Raw(Schema):
         self._io = io
 
     @property
-    def default(self):
+    def default(self):  # 字段可执行则执行
         if callable(self._default):
             return self._default()
         return self._default
@@ -739,7 +482,7 @@ class Raw(Schema):
         self._default = value
 
     def schema(self):
-        schema = self._schema
+        schema = self._schema  # 格式可执行则执行
         if callable(schema):
             schema = schema()
         if isinstance(schema, Schema):
@@ -762,13 +505,13 @@ class Raw(Schema):
         return value
 
     def convert(self, instance, update=False, validate=True):
-        if validate:
+        if validate:  # 需要验证则使用父类验证
             instance = super(Raw, self).convert(instance, update)
         if instance is not None:
             return self.converter(instance)
         return instance
 
-    def formatter(self, value):
+    def formatter(self, value):  # 后续继承这个格式化
         return value
 
     def converter(self, value):
@@ -782,14 +525,12 @@ class Raw(Schema):
         return "{}(attribute={})".format(self.__class__.__name__, repr(self.attribute))
 
 
-class Any(Raw):
+class Any(Raw):  # 可以用字典初始化
     def __init__(self, **kwargs):
-        super(Any, self).__init__(
-            {"type": ["null", "string", "number", "boolean", "object", "array"]}, **kwargs
-        )
+        super(Any, self).__init__({"type": ["null", "string", "number", "boolean", "object", "array"]}, **kwargs)
 
 
-class Custom(Raw):
+class Custom(Raw):  # 自定义字段
     def __init__(self, schema, converter=None, formatter=None, **kwargs):
         super(Custom, self).__init__(schema, **kwargs)
         self._converter = converter
@@ -807,8 +548,8 @@ class Custom(Raw):
 
 
 class Array(Raw, ResourceBound):
-    def __init__(self, cls_or_instance, min_items=None, max_items=None, unique=None, **kwargs):
-        self.container = container = _field_from_object(self, cls_or_instance)
+    def __init__(self, schema_cls_or_obj, min_items=None, max_items=None, unique=None, **kwargs):
+        self.container = container = _field_from_object(self, schema_cls_or_obj)
         schema_properties = [("type", "array")]
         schema_properties += [
             (k, v)
@@ -845,18 +586,8 @@ class Array(Raw, ResourceBound):
         return [self.container.convert(v) for v in value]
 
 
-List = Array
-
-
 class Object(Raw, ResourceBound):
-    def __init__(
-        self,
-        properties=None,
-        pattern=None,
-        pattern_properties=None,
-        additional_properties=None,
-        **kwargs
-    ):
+    def __init__(self, properties=None, pattern=None, pattern_properties=None, additional_properties=None, **kwargs):
         self.properties = None
         self.pattern_properties = None
         self.additional_properties = None
@@ -875,22 +606,17 @@ class Object(Raw, ResourceBound):
         if isinstance(pattern_properties, (type, Raw)):
             self.pattern_properties = _field_from_object(self, pattern_properties)
         elif isinstance(pattern_properties, dict):
-            self.pattern_properties = {
-                p: _field_from_object(self, f) for (p, f) in pattern_properties.items()
-            }
+            self.pattern_properties = {p: _field_from_object(self, f) for (p, f) in pattern_properties.items()}
 
         def schema():
             request = {"type": "object"}
             response = {"type": "object"}
             for schema, attr in ((request, "request"), (response, "response")):
                 if self.properties:
-                    schema["properties"] = {
-                        key: getattr(field, attr) for (key, field) in self.properties.items()
-                    }
+                    schema["properties"] = {key: getattr(field, attr) for (key, field) in self.properties.items()}
                 if self.pattern_properties:
                     schema["patternProperties"] = {
-                        pattern: getattr(field, attr)
-                        for (pattern, field) in self.pattern_properties.items()
+                        pattern: getattr(field, attr) for (pattern, field) in self.pattern_properties.items()
                     }
                 if self.additional_properties:
                     schema["additionalProperties"] = getattr(self.additional_properties, attr)
@@ -898,9 +624,7 @@ class Object(Raw, ResourceBound):
                     schema["additionalProperties"] = False
             return response, request
 
-        if self.pattern_properties and (
-            len(self.pattern_properties) > 1 or self.additional_properties
-        ):
+        if self.pattern_properties and (len(self.pattern_properties) > 1 or self.additional_properties):
             raise NotImplementedError(
                 "Only one pattern property is currently supported and it cannot be combined with additionalProperties"
             )
@@ -908,13 +632,10 @@ class Object(Raw, ResourceBound):
 
     def bind(self, resource):
         if self.properties:
-            self.properties = {
-                key: _bind_schema(value, resource) for (key, value) in self.properties.items()
-            }
+            self.properties = {key: _bind_schema(value, resource) for (key, value) in self.properties.items()}
         if self.pattern_properties:
             self.pattern_properties = {
-                key: _bind_schema(value, resource)
-                for (key, value) in self.pattern_properties.items()
+                key: _bind_schema(value, resource) for (key, value) in self.pattern_properties.items()
             }
         if self.additional_properties:
             self.additional_properties = _bind_schema(self.additional_properties, resource)
@@ -937,24 +658,12 @@ class Object(Raw, ResourceBound):
         if self.pattern_properties:
             (pattern, field) = next(iter(self.pattern_properties.items()))
             if not self.additional_properties:
-                output.update(
-                    {
-                        k: field.format(v)
-                        for (k, v) in value.items()
-                        if k not in self._property_attributes
-                    }
-                )
+                output.update({k: field.format(v) for (k, v) in value.items() if k not in self._property_attributes})
             else:
                 raise NotImplementedError()
         elif self.additional_properties:
             field = self.additional_properties
-            output.update(
-                {
-                    k: field.format(v)
-                    for (k, v) in value.items()
-                    if k not in self._property_attributes
-                }
-            )
+            output.update({k: field.format(v) for (k, v) in value.items() if k not in self._property_attributes})
         return output
 
     def converter(self, instance):
@@ -967,31 +676,19 @@ class Object(Raw, ResourceBound):
         if self.pattern_properties:
             (pattern, field) = next(iter(self.pattern_properties.items()))
             if not self.additional_properties:
-                result.update(
-                    {
-                        key: field.convert(value)
-                        for (key, value) in instance.items()
-                        if key not in result
-                    }
-                )
+                result.update({key: field.convert(value) for (key, value) in instance.items() if key not in result})
             else:
                 raise NotImplementedError()
         elif self.additional_properties:
             field = self.additional_properties
-            result.update(
-                {
-                    key: field.convert(value)
-                    for (key, value) in instance.items()
-                    if key not in result
-                }
-            )
+            result.update({key: field.convert(value) for (key, value) in instance.items() if key not in result})
         return result
 
 
-class AttributeMapped:
-    def __init__(self, cls_or_instance, mapping_attribute=None, **kwargs):
+class AttributeMapped(Object):  # fixme missing Raw
+    def __init__(self, schema_cls_or_obj, mapping_attribute=None, **kwargs):
         self.mapping_attribute = mapping_attribute
-        super(AttributeMapped, self).__init__(cls_or_instance, **kwargs)
+        super(AttributeMapped, self).__init__(schema_cls_or_obj, **kwargs)
 
     def _set_mapping_attribute(self, obj, value):
         if isinstance(obj, dict):
@@ -1005,28 +702,23 @@ class AttributeMapped:
             (pattern, field) = next(iter(self.pattern_properties.items()))
             return {get_value(self.mapping_attribute, v, None): field.format(v) for v in value}
         elif self.additional_properties:
-            return {
-                get_value(self.mapping_attribute, v, None): self.additional_properties.format(v)
-                for v in value
-            }
+            return {get_value(self.mapping_attribute, v, None): self.additional_properties.format(v) for v in value}
 
     def converter(self, value):
         if self.pattern_properties:
             (pattern, field) = next(iter(self.pattern_properties.items()))
             return [self._set_mapping_attribute(field.convert(v), k) for (k, v) in value.items()]
         elif self.additional_properties:
-            return [
-                self._set_mapping_attribute(self.additional_properties.convert(v), k)
-                for (k, v) in value.items()
-            ]
+            return [self._set_mapping_attribute(self.additional_properties.convert(v), k) for (k, v) in value.items()]
 
 
+# status = String(1,10,enum=["low","high"])
 class String(Raw):
     url_rule_converter = "string"
 
     def __init__(
         self, min_length=None, max_length=None, pattern=None, enum=None, format=None, **kwargs
-    ):
+    ):  # 参数用于类型检查 pattern 应为正则表达式 enum 应为枚举
         schema = {"type": "string"}
         if enum is not None:
             enum = list(enum)
@@ -1042,6 +734,7 @@ class String(Raw):
         super(String, self).__init__(schema, **kwargs)
 
 
+# id = UUID(io='r')
 class UUID(String):
     url_rule_converter = "string"
     UUID_REGEX = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
@@ -1061,11 +754,11 @@ class Date(Raw):
             **kwargs
         )
 
-    def formatter(self, value):
+    def formatter(self, value):  # 时间戳
         return {"$date": int(calendar.timegm(value.timetuple()) * 1000)}
 
     def converter(self, value):
-        return datetime.fromtimestamp(value["$date"] / 1000, timezone.utc).date()
+        return datetime.datetime.fromtimestamp(value["$date"] / 1000, timezone.utc).date()
 
 
 class DateTime(Date):
@@ -1073,7 +766,7 @@ class DateTime(Date):
         return {"$date": int(calendar.timegm(value.utctimetuple()) * 1000)}
 
     def converter(self, value):
-        return datetime.fromtimestamp(value["$date"] / 1000, timezone.utc)
+        return datetime.datetime.fromtimestamp(value["$date"] / 1000, timezone.utc)
 
 
 class DateString(Raw):
@@ -1139,9 +832,7 @@ class PositiveInteger(Integer):
 
 
 class Number(Raw):
-    def __init__(
-        self, minimum=None, maximum=None, exclusive_minimum=False, exclusive_maximum=False, **kwargs
-    ):
+    def __init__(self, minimum=None, maximum=None, exclusive_minimum=False, exclusive_maximum=False, **kwargs):
         schema = {"type": "number"}
         if minimum is not None:
             schema["minimum"] = minimum
@@ -1158,12 +849,12 @@ class Number(Raw):
 
 
 class ToOne(Raw, ResourceBound):
-    def __init__(self, resource, **kwargs):
+    def __init__(self, resource, **kwargs):  # resource可以是名称
         self.target_reference = ResourceReference(resource)
 
         def schema():
             target = self.target
-            key_converters = self.target.meta.key_converters
+            key_converters = self.target.meta.key_converters  # 键转
             response_schema = self.formatter_key.response
             if len(key_converters) > 1:
                 request_schema = {"anyOf": [nk.request for nk in key_converters]}
@@ -1198,7 +889,7 @@ class ToOne(Raw, ResourceBound):
     def formatter(self, item):
         return self.formatter_key.format(item)
 
-    def converter(self, value):
+    def converter(self, value):  # 转换器
         for python_type, json_type in (
             (dict, "object"),
             (int, "integer"),
@@ -1214,7 +905,7 @@ class ToMany(Array):
         super(ToMany, self).__init__(ToOne(resource, nullable=False), **kwargs)
 
 
-class Inline(Raw, ResourceBound):
+class Inline(Raw, ResourceBound):  # 内联 默认不可更新 todo 设置可更新
     def __init__(self, resource, patchable=False, **kwargs):
         self.target_reference = ResourceReference(resource)
         self.patchable = patchable
@@ -1227,7 +918,7 @@ class Inline(Raw, ResourceBound):
 
             if not self.patchable:
                 return _response_schema()
-            else:
+            else:  # 若可更新 self.target.schema.patchable.update 为 request 语法
                 return _response_schema(), self.target.schema.patchable.update
 
         super(Inline, self).__init__(schema, **kwargs)
@@ -1254,7 +945,7 @@ class Inline(Raw, ResourceBound):
     def format(self, item):
         return self.target.schema.format(item)
 
-    def convert(self, item, update=False, validate=True):
+    def convert(self, item, update=False, validate=True):  # 转换为输入 默认不可更新
         if not validate:
             raise NotImplementedError()
         return self.target.schema.convert(item, update=update, patchable=self.patchable)
@@ -1263,9 +954,7 @@ class Inline(Raw, ResourceBound):
 class ItemType(Raw):
     def __init__(self, resource):
         self.resource = resource
-        super(ItemType, self).__init__(
-            lambda: {"type": "string", "enum": [self.resource.meta.name]}, io="r"
-        )
+        super(ItemType, self).__init__(lambda: {"type": "string", "enum": [self.resource.meta.name]}, io="r")
 
     def format(self, value):
         return self.resource.meta.name
@@ -1298,6 +987,9 @@ class ItemUri(Raw):
         return self.target.manager.id_field.convert(args["id"])
 
 
+# -------------------过滤器-------------------------------------
+
+
 class BaseFilter(Schema):
     def __init__(self, name, field=None, attribute=None):
         self.attribute = attribute or field.attribute
@@ -1305,10 +997,10 @@ class BaseFilter(Schema):
         self.name = name
 
     def op(self, a, b):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @property
-    def filter_field(self):
+    def filter_field(self):  # 过滤器字段
         return self.field
 
     def _schema(self):
@@ -1335,7 +1027,6 @@ class BaseFilter(Schema):
         }
 
 
-# todo from operator import *
 class EqualFilter(BaseFilter):
     def op(self, a, b):
         return a == b
@@ -1559,7 +1250,7 @@ FILTERS_BY_TYPE = (
 )
 
 
-class Condition:
+class Condition:  # 属性 过滤器 值
     def __init__(self, attribute, filter, value):
         self.attribute = attribute
         self.filter = filter
@@ -1569,7 +1260,6 @@ class Condition:
         return self.filter.op(get_value(self.attribute, item, None), self.value)
 
 
-# todo 获取名字无需遍历
 def _get_names_for_filter(filter, filter_names=FILTER_NAMES):
     for f, name in filter_names:
         if f == filter:
@@ -1611,11 +1301,7 @@ def filters_for_fields(
             if isinstance(field_expression, dict):
                 field_filters = field_expression
             elif isinstance(field_expression, (list, tuple)):
-                field_filters = {
-                    name: filter
-                    for (name, filter) in field_filters.items()
-                    if name in field_expression
-                }
+                field_filters = {name: filter for (name, filter) in field_filters.items() if name in field_expression}
             elif field_expression is not True:
                 continue
         elif filters_expression is not True:
@@ -1648,7 +1334,7 @@ class PaginationMixin:
 
     @cached_property
     def _pagination_types(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def format_response(self, data):
         if not isinstance(data, self._pagination_types):
@@ -1661,12 +1347,13 @@ class PaginationMixin:
             links.append((request.path, data.page + 1, data.per_page, "next"))
         links.append((request.path, max(data.pages, 1), data.per_page, "last"))
         headers = {
-            "Link": ",".join(
-                ('<{0}?page={1}&per_page={2}>; rel="{3}"'.format(*link) for link in links)
-            ),
+            "Link": ",".join(('<{0}?page={1}&per_page={2}>; rel="{3}"'.format(*link) for link in links)),
             "X-Total-Count": data.total,
         }
         return self.format(data.items), 200, headers
+
+    def format(self, data):
+        raise NotImplementedError()
 
 
 class RelationInstances(PaginationMixin, ToMany):
@@ -1707,10 +1394,7 @@ class Instances(PaginationMixin, Schema, ResourceBound):
     def _filter_schema(self):
         return {
             "type": "object",
-            "properties": {
-                name: self._field_filters_schema(filters)
-                for (name, filters) in self._filters.items()
-            },
+            "properties": {name: self._field_filters_schema(filters) for (name, filters) in self._filters.items()},
             "additionalProperties": False,
         }
 
@@ -1721,9 +1405,7 @@ class Instances(PaginationMixin, Schema, ResourceBound):
             "properties": {
                 name: {
                     "type": "boolean",
-                    "description": "Sort by {} in descending order if 'true', ascending order if 'false'.".format(
-                        name
-                    ),
+                    "description": "Sort by {} in descending order if 'true', ascending order if 'false'.".format(name),
                 }
                 for (name, field) in self._sort_fields.items()
             },
@@ -1761,9 +1443,7 @@ class Instances(PaginationMixin, Schema, ResourceBound):
     def parse_request(self, request):
         try:
             page = request.args.get("page", 1, type=int)
-            per_page = request.args.get(
-                "per_page", current_app.config["RESTONE_DEFAULT_PER_PAGE"], type=int
-            )
+            per_page = request.args.get("per_page", current_app.config["RESTONE_DEFAULT_PER_PAGE"], type=int)
             # todo 改变这里即可改变查询方式
             where = json.loads(request.args.get("where", "{}"))
             sort = json.loads(
@@ -1780,9 +1460,7 @@ class Instances(PaginationMixin, Schema, ResourceBound):
     def parse_request2(self, request):
         try:
             page = request.args.get("page", 1, type=int)
-            per_page = request.args.get(
-                "per_page", current_app.config["RESTONE_DEFAULT_PER_PAGE"], type=int
-            )
+            per_page = request.args.get("per_page", current_app.config["RESTONE_DEFAULT_PER_PAGE"], type=int)
             # todo 改变这里即可改变查询方式
             # name__eq=xxx&date__gt=200908&name__in=a,b,
             # c&date__sw=start
@@ -1901,11 +1579,7 @@ class Manager:
             meta.key_converters_by_type = {}
             for nk in meta.key_converters:
                 if nk.matcher_type() in meta.key_converters_by_type:
-                    raise RuntimeError(
-                        "Multiple keys of type {} defined for {}".format(
-                            nk.matcher_type(), meta.name
-                        )
-                    )
+                    raise RuntimeError("Multiple keys of type {} defined for {}".format(nk.matcher_type(), meta.name))
                 meta.key_converters_by_type[nk.matcher_type()] = nk
 
     def _post_init(self, resource, meta):
@@ -2075,9 +1749,7 @@ class RefKey(Key):
         }
 
     def _item_uri(self, resource, item):
-        return "{}/{}".format(
-            resource.route_prefix, get_value(resource.manager.id_attribute, item, None)
-        )
+        return "{}/{}".format(resource.route_prefix, get_value(resource.manager.id_attribute, item, None))
 
     def format(self, item):
         return {"$ref": self._item_uri(self.resource, item)}
@@ -2108,9 +1780,7 @@ class PropertyKey(Key):
         return self.resource.manager.filters[self.property][None]
 
     def convert(self, value):
-        return self.resource.manager.first(
-            where=[Condition(self.property, self._field_filter, value)]
-        )
+        return self.resource.manager.first(where=[Condition(self.property, self._field_filter, value)])
 
 
 class PropertiesKey(Key):
@@ -2184,14 +1854,8 @@ class ResourceReference:
         except ValueError:
             pass
         if binding and binding.api:
-            raise RuntimeError(
-                'Resource named "{}" is not registered with the Api it is bound to.'.format(name)
-            )
-        raise RuntimeError(
-            'Resource named "{}" cannot be found; the reference is not bound to an Api.'.format(
-                name
-            )
-        )
+            raise RuntimeError('Resource named "{}" is not registered with the Api it is bound to.'.format(name))
+        raise RuntimeError('Resource named "{}" cannot be found; the reference is not bound to an Api.'.format(name))
 
     def __repr__(self):
         return "<ResourceReference '{}'>".format(self.value)
@@ -2278,9 +1942,7 @@ class Resource(metaclass=ResourceMeta):
         if self.schema:
             schema["type"] = "object"
             schema.update(self.schema.response)
-        schema["links"] = [
-            link.schema_factory(self) for link in sorted(links, key=attrgetter("relation"))
-        ]
+        schema["links"] = [link.schema_factory(self) for link in sorted(links, key=attrgetter("relation"))]
         return schema, 200, {"Content-Type": "application/schema+json"}
 
     class Meta:
@@ -2389,15 +2051,9 @@ def to_camel_case(s):
     return s[0].lower() + s.title().replace("_", "")[1:] if s else s
 
 
-def _method_decorator(method):
-    def wrapper(self, *args, **kwargs):
-        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
-            return self.for_method(method, args[0], **kwargs)
-        else:
-            return lambda f: self.for_method(method, f, *args, **kwargs)
-
-    wrapper.__name__ = method
-    return wrapper
+class RouteSet:
+    def routes(self):
+        return ()
 
 
 class Relation(RouteSet, ResourceBound):  # 关系型也是RouteSet子类
@@ -2422,9 +2078,7 @@ class Relation(RouteSet, ResourceBound):  # 关系型也是RouteSet子类
         if "r" in io:
 
             def relation_instances(resource, item, page, per_page):
-                return resource.manager.relation_instances(
-                    item, self.attribute, self.target, page, per_page
-                )
+                return resource.manager.relation_instances(item, self.attribute, self.target, page, per_page)
 
             yield relations_route.for_method(
                 "GET",
@@ -2483,8 +2137,8 @@ def route_from(url, method=None):
                 "Application was not able to create a URL adapter for request independent URL matching. You might be able to fix this by setting the SERVER_NAME config variable."
             )
     parsed_url = url_parse(url)
-    if parsed_url.netloc is not "" and parsed_url.netloc != url_adapter.server_name:
-        raise NotFound()
+    if parsed_url.netloc != "" and parsed_url.netloc != url_adapter.server_name:
+        raise PageNotFound()
     return url_adapter.match(parsed_url.path, method)
 
 
@@ -2511,6 +2165,266 @@ def get_value(key, obj, default):
         except (IndexError, TypeError, KeyError):
             pass
     return getattr(obj, key, default)
+
+
+# -----------------自动路由----------------------------------------------
+def _route_decorator(method):  # 路由装饰器
+    def decorator(cls, *args, **kwargs):
+        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
+            return cls(method, args[0])  # 没有关键字参数只有一个位置参数的视图函数
+            # 这个位置参数就是路由endpoint 如 /instances
+        return lambda f: cls(method, f, *args, **kwargs)  # 返回函数 返回的是路由类
+
+    decorator.__name__ = method
+    return classmethod(decorator)
+
+
+def _method_decorator(method):
+    def wrapper(self, *args, **kwargs):
+        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
+            return self.for_method(method, args[0], **kwargs)
+        else:
+            return lambda f: self.for_method(method, f, *args, **kwargs)
+
+    wrapper.__name__ = method
+    return wrapper
+
+
+class Route:
+    def __init__(
+        self,
+        method=None,
+        view_func=None,
+        rule=None,
+        attribute=None,
+        rel=None,
+        title=None,
+        description=None,
+        schema=None,
+        response_schema=None,
+        format_response=True,
+        success_code=None,
+    ):
+        self.rel = rel  # 关系
+        self.rule = rule  # 规则
+        self.method = method  # get/post
+        self.attribute = attribute  # 属性？
+        self.title = title  # 标题？网页标题
+        self.description = description  # 网页描述？
+        self.view_func = view_func  # 视图函数
+        self.format_response = format_response  # 是否格式化响应
+        self.success_code = success_code  # 状态码
+        annotations = getattr(view_func, "__annotations__", None)  # 获取视图函数的标注
+        if isinstance(annotations, dict) and len(annotations):
+            self.request_schema = FieldSet(
+                {name: field for (name, field) in annotations.items() if name != "return"}
+            )  # 请求的语法就是参数名和参数字段类型的字段集，响应也有字段
+            self.response_schema = annotations.get("return", response_schema)
+        else:  # 没有标注则要指定参数
+            self.request_schema = schema
+            self.response_schema = response_schema
+        self._related_routes = ()  # 相关的路由
+        for method in HTTP_METHODS:
+            setattr(self, method, MethodType(_method_decorator(method), self))
+            setattr(self, method.lower(), getattr(self, method))  # 忽略大小写GET成为装饰器
+
+    @property
+    def relation(self):  # 关系型数据资源
+        if self.rel:
+            return self.rel  # 关联字符串 read_status?
+
+        verb = HTTP_METHOD_VERB_DEFAULTS.get(self.method, self.method.lower())
+        return to_camel_case("{}_{}".format(verb, self.attribute))
+
+    def schema_factory(self, resource):  # 规则工厂 将路由的请求与响应规则绑定到资源上
+        request_schema = _bind_schema(self.request_schema, resource)
+        response_schema = _bind_schema(self.response_schema, resource)
+        schema = OrderedDict(
+            [
+                ("rel", self.relation),  # 关联
+                (
+                    "href",
+                    url_rule_to_uri_pattern(self.rule_factory(resource, relative=False)),
+                ),
+                ("method", self.method),
+            ]
+        )
+        if self.title:
+            schema["title"] = self.title
+        if self.description:
+            schema["description"] = self.description
+        if request_schema:
+            schema["schema"] = request_schema.request  # 请求格式的请求部分
+        if response_schema:
+            schema["targetSchema"] = response_schema.response  # 响应格式的响应部分
+        return schema
+
+    def for_method(
+        self, method, view_func, rel=None, title=None, description=None, schema=None, response_schema=None, **kwargs
+    ):
+        attribute = kwargs.pop("attribute", self.attribute)
+        format_response = kwargs.pop("format_response", self.format_response)
+        instance = self.__class__(
+            method,
+            view_func,
+            rule=self.rule,
+            rel=rel,
+            title=title,
+            description=description,
+            schema=schema,
+            response_schema=response_schema,
+            attribute=attribute,
+            format_response=format_response,
+            **kwargs
+        )
+        instance._related_routes = self._related_routes + (self,)
+        return instance
+
+    # 存在了__get__的方法的类称之为描述符类
+    # descriptor 的实例自己访问自己是不会触发__get__ ，而会触发__call__，
+    # 只有 descriptor 作为其它类的属性的时候才会触发 __get___
+    def __get__(self, obj, owner):  # 返回的是个视图函数或类，obj是自己的对象，owner是自己的所属类
+        if obj is None:
+            return self
+        return lambda *args, **kwargs: self.view_func.__call__(obj, *args, **kwargs)
+
+    def __repr__(self):
+        return "{}({})".format(self.__class__.__name__, repr(self.rule))
+
+    @property
+    def request_schema(self):
+        return self.schema  # 先调用了setter方法所以存在
+
+    @request_schema.setter
+    def request_schema(self, schema):
+        self.schema = schema
+
+    def rule_factory(self, resource, relative=False):  # 规则工厂
+        rule = self.rule  # 规则是个字符串
+        if rule is None:
+            rule = "/{}".format(attribute_to_route_uri(self.attribute))
+            # self.attribute 可以关联到资源属性和rule二选一
+            # Route.get('/status') 是 rule
+            # Route.get(attribute='status') 是属性
+        elif callable(rule):  # 规则可以调用资源
+            rule = rule(resource)
+        if relative or resource.route_prefix is None:
+            return rule[1:]
+        return "".join((resource.route_prefix, rule))
+
+    def view_factory(self, name, resource):  # 视图工厂
+        request_schema = _bind_schema(self.request_schema, resource)
+        response_schema = _bind_schema(self.response_schema, resource)
+        view_func = self.view_func
+
+        def view(*args, **kwargs):
+            instance = resource()  # 资源实例
+            if isinstance(request_schema, (FieldSet, Instances)):  # 请求字段集和实例集
+                kwargs.update(request_schema.parse_request(request))  # 上文实现了
+            elif isinstance(request_schema, Schema):  # 普通的格式
+                args += (request_schema.parse_request(request),)  # 为何是元组？
+            response = view_func(instance, *args, **kwargs)
+            if not isinstance(response, tuple) and self.success_code:
+                response = (response, self.success_code)
+            if response_schema is None or not self.format_response:
+                return response
+            else:
+                return response_schema.format_response(response)  # 格式化
+
+        return view
+
+
+for method in HTTP_METHODS:
+    setattr(Route, method.lower(), _route_decorator(method))
+    setattr(Route, method, _route_decorator(method))
+
+
+class ItemRoute(Route):  # 单个记录
+    def rule_factory(self, resource, relative=False):
+        rule = self.rule
+        id_matcher = "<{}:id>".format(resource.meta.id_converter)
+        if rule is None:
+            rule = "/{}".format(attribute_to_route_uri(self.attribute))
+        elif callable(rule):
+            rule = rule(resource)
+        if relative or resource.route_prefix is None:
+            return rule[1:]
+        return "".join((resource.route_prefix, "/", id_matcher, rule))
+
+    def view_factory(self, name, resource):
+        original_view = super(ItemRoute, self).view_factory(name, resource)
+
+        def view(*args, **kwargs):
+            id = kwargs.pop("id")
+            item = resource.manager.read(id)
+            return original_view(item, *args, **kwargs)
+
+        return view
+
+
+def _field_from_object(parent, schema_cls_or_obj):  # 从对象获取字段
+    if isinstance(schema_cls_or_obj, type):
+        container = schema_cls_or_obj()  # 类的实例
+    else:
+        container = schema_cls_or_obj  # 实例
+    if not isinstance(container, Schema):  # 实例不是格式类
+        raise RuntimeError("{} expected Raw or Schema, but got {}".format(parent, container.__class__.__name__))
+    if not isinstance(container, Raw):  # 实例不是Raw类是Schema类
+        container = Raw(container)  # 用Raw类包裹
+    return container
+
+
+class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
+    def __init__(self, schema_cls_or_obj, io=None, attribute=None):
+        self.field = _field_from_object(ItemAttributeRoute, schema_cls_or_obj)
+        self.attribute = attribute
+        self.io = io
+
+    def routes(self):
+        io = self.io or self.field.io
+        field = self.field
+        route = ItemRoute(attribute=self.attribute)
+        attribute = field.attribute or route.attribute
+        if "r" in io:  # 读属性的路由
+
+            def read_attribute(resource, item):
+                if hasattr(resource, "before_read_{}".format(attribute)):  # 直接调用source的钩子
+                    getattr(resource, "before_read_{}".format(attribute))(item)  # 也可以直接改为信号发射
+
+                resp = get_value(attribute, item, field.default)
+
+                if hasattr(resource, "after_read_{}".format(attribute)):  # 直接调用source的钩子
+                    getattr(resource, "after_read_{}".format(attribute))(item)
+
+                return resp
+
+            yield route.for_method(
+                "GET",
+                read_attribute,
+                response_schema=field,
+                rel=to_camel_case("read_{}".format(route.attribute)),
+                # readDescription
+            )
+        if "u" in io:  # 更新属性的路由
+
+            def update_attribute(resource, item, value):  # 直接post一个string即可
+                if hasattr(resource, "before_update_{}".format(attribute)):  # 直接调用source的钩子
+                    getattr(resource, "before_update_{}".format(attribute))(item, value)  # 也可以直接改为信号发射
+
+                item = resource.manager.update(item, {attribute: value})
+
+                if hasattr(resource, "after_update_{}".format(attribute)):  # 直接调用source的钩子
+                    getattr(resource, "after_update_{}".format(attribute))(item, value)  # 也可以直接改为信号发射
+
+                return get_value(attribute, item, field.default)
+
+            yield route.for_method(
+                "POST",
+                update_attribute,
+                schema=field,
+                response_schema=field,
+                rel=to_camel_case("update_{}".format(route.attribute)),
+            )
 
 
 def _make_response(data, code, headers=None):
@@ -2590,9 +2504,7 @@ class Api:
         app.handle_user_exception = partial(self._exception_handler, app.handle_user_exception)
 
     def _register_view(self, app, rule, view_func, endpoint, methods, relation):
-        decorate_view_func = (
-            relation != "describedBy" or app.config["RESTONE_DECORATE_SCHEMA_ENDPOINTS"]
-        )
+        decorate_view_func = relation != "describedBy" or app.config["RESTONE_DECORATE_SCHEMA_ENDPOINTS"]
         if self.blueprint:
             endpoint = "{}.{}".format(self.blueprint.name, endpoint)
         view_func = self.output(view_func)
@@ -2614,7 +2526,7 @@ class Api:
         @wraps(view)
         def wrapper(*args, **kwargs):
             resp = view(*args, **kwargs)
-            if isinstance(resp, BaseResponse):
+            if isinstance(resp, Response):
                 return resp
             (data, code, headers) = unpack(resp)
             return _make_response(data, code, headers)
@@ -2642,6 +2554,7 @@ class Api:
         view_func = route.view_factory(endpoint, resource)
         if decorator:
             view_func = decorator(view_func)
+        print(rule, view_func, endpoint, methods, route.relation)
         if self.app and (not self.blueprint):
             self._register_view(self.app, rule, view_func, endpoint, methods, route.relation)
         else:
@@ -2651,9 +2564,7 @@ class Api:
         if resource in self.resources.values():
             return
         if resource.api is not None and resource.api != self:
-            raise RuntimeError(
-                "Attempted to register a resource that is already registered with a different Api."
-            )
+            raise RuntimeError("Attempted to register a resource that is already registered with a different Api.")
         if issubclass(resource, ModelResource) and resource.manager is None:
             if self.default_manager:
                 resource.manager = self.default_manager(resource, resource.meta.get("model"))
@@ -2680,7 +2591,10 @@ class Api:
                     route.attribute = "{}_{}".format(rset.attribute, i)
                 resource.routes["{}_{}".format(rset.attribute, route.relation)] = route
                 # status_readStatus #todo 改变格式
-                self.add_route(route, resource)
+                # _decorator = getattr(resource, route.relation, None) #同样的装饰 todo improvment
+                # 把装饰放到 resource 下面
+                # if callable()
+                self.add_route(route, resource)  # ,decorator=_decorator)
         self.resources[resource.meta.name] = resource
 
 
@@ -2914,13 +2828,6 @@ SQL_FILTERS_BY_TYPE = (
 
 
 class SQLAlchemyManager(RelationalManager):
-    """
-    A manager for SQLAlchemy models.
-
-    Expects that ``Meta.model`` contains a SQLALchemy declarative model.
-
-    """
-
     FILTER_NAMES = SQL_FILTER_NAMES
     FILTERS_BY_TYPE = SQL_FILTERS_BY_TYPE
     PAGINATION_TYPES = (Pagination, SAPagination)
@@ -2984,7 +2891,8 @@ class SQLAlchemyManager(RelationalManager):
                     fs.required.add(name)
                 fs.set(name, self._get_field_from_column_type(column, name, io=io))
 
-    def _get_sort_expression(self, model, meta, id_column):
+    @staticmethod
+    def _get_sort_expression(model, meta, id_column):
         if meta.sort_attribute is None:
             return id_column.asc()
 
@@ -3007,9 +2915,7 @@ class SQLAlchemyManager(RelationalManager):
         elif isinstance(column.type, postgresql.HSTORE):
             field_class = Object
             args = (String,)
-        elif hasattr(postgresql, "JSON") and isinstance(
-            column.type, (postgresql.JSON, postgresql.JSONB)
-        ):
+        elif hasattr(postgresql, "JSON") and isinstance(column.type, (postgresql.JSON, postgresql.JSONB)):
             field_class = Raw
             kwargs = {"schema": {}}
         else:
@@ -3153,11 +3059,7 @@ class SQLAlchemyManager(RelationalManager):
                     raise DuplicateKey(detail=e.orig.diag.message_detail)
 
             if current_app.debug:
-                raise BackendConflict(
-                    debug_info=dict(
-                        exception_message=str(e), statement=e.statement, params=e.params
-                    )
-                )
+                raise BackendConflict(debug_info=dict(exception_message=str(e), statement=e.statement, params=e.params))
             raise BackendConflict()
 
         after_create.send(self.resource, item=item)
@@ -3167,9 +3069,7 @@ class SQLAlchemyManager(RelationalManager):
         session = self._get_session()
 
         actual_changes = {
-            key: value
-            for key, value in changes.items()
-            if self._is_change(get_value(key, item, None), value)
+            key: value for key, value in changes.items() if self._is_change(get_value(key, item, None), value)
         }
 
         try:
@@ -3188,11 +3088,7 @@ class SQLAlchemyManager(RelationalManager):
                     raise DuplicateKey(detail=e.orig.diag.message_detail)
 
             if current_app.debug:
-                raise BackendConflict(
-                    debug_info=dict(
-                        exception_message=str(e), statement=e.statement, params=e.params
-                    )
-                )
+                raise BackendConflict(debug_info=dict(exception_message=str(e), statement=e.statement, params=e.params))
             raise BackendConflict()
 
         after_update.send(self.resource, item=item, changes=actual_changes)
@@ -3210,11 +3106,7 @@ class SQLAlchemyManager(RelationalManager):
             session.rollback()
 
             if current_app.debug:
-                raise BackendConflict(
-                    debug_info=dict(
-                        exception_message=str(e), statement=e.statement, params=e.params
-                    )
-                )
+                raise BackendConflict(debug_info=dict(exception_message=str(e), statement=e.statement, params=e.params))
             raise BackendConflict()
 
         after_delete.send(self.resource, item=item)
@@ -3233,21 +3125,15 @@ class SQLAlchemyManager(RelationalManager):
         return self._query_get_all(query)
 
     def relation_add(self, item, attribute, target_resource, target_item):
-        before_add_to_relation.send(
-            self.resource, item=item, attribute=attribute, child=target_item
-        )  # 增加关联对象之前
+        before_add_to_relation.send(self.resource, item=item, attribute=attribute, child=target_item)  # 增加关联对象之前
         getattr(item, attribute).append(target_item)  # 一对多
         after_add_to_relation.send(self.resource, item=item, attribute=attribute, child=target_item)
 
     def relation_remove(self, item, attribute, target_resource, target_item):
-        before_remove_from_relation.send(
-            self.resource, item=item, attribute=attribute, child=target_item
-        )
+        before_remove_from_relation.send(self.resource, item=item, attribute=attribute, child=target_item)
         try:
             getattr(item, attribute).remove(target_item)
-            after_remove_from_relation.send(
-                self.resource, item=item, attribute=attribute, child=target_item
-            )
+            after_remove_from_relation.send(self.resource, item=item, attribute=attribute, child=target_item)
         except ValueError:
             pass  # if the relation does not exist, do nothing
 

@@ -961,29 +961,29 @@ class Condition:  # 属性 过滤器 值
 
 
 class BaseFilter(Schema):
-    name=None
-    def __init__(self, name=None, field=None, attribute=None):
+    name = None
+    namespace = 'base'
+    def __init__(self, field=None, attribute=None):
         self._attribute = attribute
         self._field = field
-        # self.name = name
 
     @property
     def field(self):  # 被过滤的字段,只是使用field.convert
         return self._field
-    
+
     @property
     def attribute(self):
         return self._attribute or self.field.attribute
-    
+
     def convert(self, instance):
-        if self.name is None: # 过滤器的转换就是所过滤字段的转换
+        if self.name is None:  # 过滤器的转换就是所过滤字段的转换
             return Condition(self.attribute, self, self.field.convert(instance))
         return Condition(self.attribute, self, self.field.convert(instance[f"${self.name}"]))
 
     def schema(self):
-        schema = self.field.request # 过滤器只能针对请求模式，过滤器的模式就是所过滤字段的请求模式
+        schema = self.field.request  # 过滤器只能针对请求模式，过滤器的模式就是所过滤字段的请求模式
         if schema:
-            schema = {k:v for k,v in schema.items if k !='readOnly'}
+            schema = {k: v for k, v in schema.items if k != "readOnly"}
         if self.name is None:
             return schema
         return {
@@ -992,20 +992,25 @@ class BaseFilter(Schema):
             "required": [f"${self.name}"],
             "additionalProperties": False,
         }
-
+    
+    @classmethod
+    def named_filters(cls): #
+        dct = {}
+        for c in cls.__subclasses__():
+            if c.name is not None:
+                dct[c.name] = c
+            elif c.namespace == cls.namespace:
+                dct.update(c.named_filters())
+        return dct
 
 class EqualFilter(BaseFilter):
-    name = 'eq'
-    def op(self, a, b):
-        return a == b
+    name = "eq"
+    op = lambda s, a, b: a == b
 
-a = EqualFilter()
-print(a.name)
 
 class NotEqualFilter(BaseFilter):
-    name = 'ne'
-    def op(self, a, b):
-        return a != b
+    name = "ne"
+    op = lambda s, a, b: a != b
 
 
 class NumberBaseFilter(BaseFilter):
@@ -1017,43 +1022,46 @@ class NumberBaseFilter(BaseFilter):
 
 
 class LessThanFilter(NumberBaseFilter):
-    def op(self, a, b):
-        return a < b
+    name = "lt"
+    op = lambda s, a, b: a < b
 
 
 class GreaterThanFilter(NumberBaseFilter):
-    def op(self, a, b):
-        return a > b
+    name = "gt"
+    op = lambda s, a, b: a > b
 
 
 class LessThanEqualFilter(NumberBaseFilter):
-    def op(self, a, b):
-        return a <= b
+    name = "lte"
+    op = lambda s, a, b: a <= b
 
 
 class GreaterThanEqualFilter(NumberBaseFilter):
-    def op(self, a, b):
-        return a >= b
+    name = "gte"
+    op = lambda s, a, b: a >= b
 
 
 class InFilter(BaseFilter):
-    min_items = 0
+    name = "in"
+    op = lambda s, a, b: a in b
 
     @cached_property
     def field(self):
-        return Array(self._field, min_items=self.min_items, unique=True)
+        return Array(self._field, min_items=0, unique=True)
 
-    def op(self, a, b):
-        return a in b
+
+# class NotInFilter(BaseFilter):
+#     name = "ni"
+#     op = lambda s, a, b: not a in b
 
 
 class ContainsFilter(BaseFilter):
+    name = "has"
+    op = lambda s, a, b: hasattr(a, "__iter__") and b in a
+
     @cached_property
     def field(self):
         return self._field.container
-
-    def op(self, a, b):
-        return hasattr(a, "__iter__") and b in a
 
 
 class StringBaseFilter(BaseFilter):
@@ -1063,176 +1071,69 @@ class StringBaseFilter(BaseFilter):
 
 
 class StringContainsFilter(StringBaseFilter):
-    def op(self, a, b):
-        return a and b in a
+    name = "ct"
+    op = lambda s, a, b: a and b in a
 
 
 class StringIContainsFilter(StringBaseFilter):
-    def op(self, a, b):
-        return a and b.lower() in a.lower()
+    name = "ict"
+    op = lambda s, a, b: a and b.lower() in a.lower()
 
 
 class StartsWithFilter(StringBaseFilter):
-    def op(self, a, b):
-        return a.startswith(b)
+    name = "sw"
+    op = lambda s, a, b: a.startswith(b)
 
 
 class IStartsWithFilter(StringBaseFilter):
-    def op(self, a, b):
-        return a.lower().startswith(b.lower())
+    name = "isw"
+    op = lambda s, a, b: a.lower().startswith(b.lower())
 
 
 class EndsWithFilter(StringBaseFilter):
-    def op(self, a, b):
-        return a.endswith(b)
+    name = "ew"
+    op = lambda s, a, b: a.endswith(b)
 
 
 class IEndsWithFilter(StringBaseFilter):
-    def op(self, a, b):
-        return a.lower().endswith(b.lower())
+    name = "iew"
+    op = lambda s, a, b: a.lower().endswith(b.lower())
 
 
 class DateBetweenFilter(BaseFilter):
+    name = "bt"
+    op = lambda s, a, b: b[0] <= a <= b[1]
+
     @cached_property
     def field(self):
         return Array(self._field, min_items=2, max_items=2)
 
-    def op(self, a, b):
-        (before, after) = b
-        return before <= a <= after
-
-# 这种方式弊端在于需要遍历，而且新写的还要改代码
-# EQUALITY_FILTER_NAME = "eq"
-FILTER_NAMES = (
-    (EqualFilter, None),
-    (EqualFilter, "eq"),
-    (NotEqualFilter, "ne"),
-    (LessThanFilter, "lt"),
-    (LessThanEqualFilter, "lte"),
-    (GreaterThanFilter, "gt"),
-    (GreaterThanEqualFilter, "gte"),
-    (InFilter, "in"),
-    (ContainsFilter, "contains"),
-    (StringContainsFilter, "contains"),
-    (StringIContainsFilter, "icontains"),
-    (StartsWithFilter, "startswith"),
-    (IStartsWithFilter, "istartswith"),
-    (EndsWithFilter, "endswith"),
-    (IEndsWithFilter, "iendswith"),
-    (DateBetweenFilter, "between"),
-)
-FILTERS_BY_TYPE = (
-    (Boolean, (EqualFilter, NotEqualFilter, InFilter)),
-    (
-        Integer,
-        (
-            EqualFilter,
-            NotEqualFilter,
-            LessThanFilter,
-            LessThanEqualFilter,
-            GreaterThanFilter,
-            GreaterThanEqualFilter,
-            InFilter,
-        ),
-    ),
-    (
-        Number,
-        (
-            EqualFilter,
-            NotEqualFilter,
-            LessThanFilter,
-            LessThanEqualFilter,
-            GreaterThanFilter,
-            GreaterThanEqualFilter,
-            InFilter,
-        ),
-    ),
-    (
-        String,
-        (
-            EqualFilter,
-            NotEqualFilter,
-            StringContainsFilter,
-            StringIContainsFilter,
-            StartsWithFilter,
-            IStartsWithFilter,
-            EndsWithFilter,
-            IEndsWithFilter,
-            InFilter,
-        ),
-    ),
-    (
-        Date,
-        (
-            EqualFilter,
-            NotEqualFilter,
-            LessThanFilter,
-            LessThanEqualFilter,
-            GreaterThanFilter,
-            GreaterThanEqualFilter,
-            DateBetweenFilter,
-            InFilter,
-        ),
-    ),
-    (
-        DateTime,
-        (
-            EqualFilter,
-            NotEqualFilter,
-            LessThanFilter,
-            LessThanEqualFilter,
-            GreaterThanFilter,
-            GreaterThanEqualFilter,
-            DateBetweenFilter,
-        ),
-    ),
-    (
-        DateString,
-        (
-            EqualFilter,
-            NotEqualFilter,
-            LessThanFilter,
-            LessThanEqualFilter,
-            GreaterThanFilter,
-            GreaterThanEqualFilter,
-            DateBetweenFilter,
-            InFilter,
-        ),
-    ),
-    (
-        DateTimeString,
-        (
-            EqualFilter,
-            NotEqualFilter,
-            LessThanFilter,
-            LessThanEqualFilter,
-            GreaterThanFilter,
-            GreaterThanEqualFilter,
-            DateBetweenFilter,
-        ),
-    ),
-    (Array, (ContainsFilter,)),
-    (ToOne, (EqualFilter, NotEqualFilter, InFilter)),
-    (ToMany, (ContainsFilter,)),
-)
 
 
 
 
-# 不直接固定死是为了更好的配置？ 为过滤器返回名字
-def _get_names_for_filter(filter, filter_names=FILTER_NAMES):
-    for f, name in filter_names:
-        if f == filter:
-            yield name
+FIELD_FILTERS_DICT = {
+    Boolean: ("eq", "ne", "in"),
+    Integer: ("eq", "ne", "lt", "lte", "gt", "gte", "in"),
+    Number: ("eq", "ne", "lt", "lte", "gt", "gte", "in"),
+    String: ("eq", "ne", "ct", "ict", "sw", "isw", "ew", "iew", "in"),
+    Date: ("eq", "ne", "lt", "lte", "gt", "gte", "bw", "in"),
+    DateTime: ("eq", "ne", "lt", "lte", "gt", "gte", "bw"),
+    DateString: ("eq", "ne", "lt", "lte", "gt", "gte", "bw", "in"),
+    DateTimeString: ("eq", "ne", "lt", "lte", "gt", "gte", "bw"),
+    Array: ("has",),
+    ToOne: ("has", "ne", "in"),
+    ToMany: ("ct",),
+    Uri: ("eq", "ne", "in"),
+    ItemUri: ("eq", "ne", "in"),
+}
 
 
-# 各个字段类可使用的过滤器类
-def filters_for_field_class(field_class, filters_by_type=FILTERS_BY_TYPE):
+def filters_for_field_class(field_class, field_filters_dict):
     field_class_filters = ()
-    filters_by_type = dict(filters_by_type)
     for cls in (field_class,) + field_class.__bases__:  # 字段和其父类
-        if cls in filters_by_type:
-            field_class_filters += filters_by_type[cls]
+        if cls in field_filters_dict:
+            field_class_filters += field_filters_dict[cls]
     return field_class_filters
 
 
@@ -1240,15 +1141,13 @@ def filters_for_field_class(field_class, filters_by_type=FILTERS_BY_TYPE):
 def filters_for_fields(
     fields,
     filters_expression,
-    filter_names=FILTER_NAMES,
-    filters_by_type=FILTERS_BY_TYPE,
+    field_filters_dict,
+    filters_name_dict,
 ):
     filters = {}
-    filters_by_type = dict(filters_by_type)
+    # filters_by_type = dict(filters_by_type)
     for field_name, field in fields.items():
-        field_filters = {
-            name: filter for filter in filters_for_field_class(field.__class__, filters_by_type) for name in _get_names_for_filter(filter, filter_names)
-        }
+        field_filters = {name: filters_name_dict[name] for name in filters_for_field_class(field.__class__, field_filters_dict)}
         if isinstance(filters_expression, dict):
             try:
                 field_expression = filters_expression[field_name]
@@ -1278,7 +1177,7 @@ def convert_filters(value, field_filters):
             for filter in field_filters.values():
                 if filter_name == filter.name:
                     return filter.convert(value)
-    filter = field_filters[None]
+    filter = field_filters["eq"]  # 没有名为None的了
     return filter.convert(value)
 
 
@@ -1467,8 +1366,10 @@ class Pagination:
 
 # 数据管理器，接入数据一端，可以是不同的数据库，只要实现了相同的方法
 class Manager:
-    FILTER_NAMES = FILTER_NAMES
-    FILTERS_BY_TYPE = FILTERS_BY_TYPE
+    base_filter = BaseFilter  # 指定过滤器基类，自动搜刮对应类
+
+    field_filters_dict = FIELD_FILTERS_DICT  # 可能会被重写的放在这里
+
     PAGINATION_TYPES = (Pagination,)
 
     def __init__(self, resource, model):
@@ -1500,8 +1401,8 @@ class Manager:
         field_filters = filters_for_fields(
             resource.schema.readable_fields,
             meta.filters,  # meta里面还有 filters= [x,y]指定了哪些字段可以用于过滤
-            filter_names=self.FILTER_NAMES,
-            filters_by_type=self.FILTERS_BY_TYPE,
+            field_filters_dict=self.field_filters_dict,
+            filters_name_dict=(self.base_filter.named_filters()),
         )
         self.filters = {
             field_name: {name: self._init_filter(filter, name, fields[field_name], field_name) for (name, filter) in field_filters.items()}
@@ -2385,7 +2286,6 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
 
 
 def schema_to_swag_dict(schema, tags=None):
-    method = schema["method"]
     rel = schema.get("rel")
     parameters = []
     if rel in ("self", "destroy") or rel.startswith("read"):
@@ -2607,8 +2507,9 @@ class InlineModel(Object):
 
 
 class SQLAlchemyBaseFilter(BaseFilter):
-    def __init__(self, name, field=None, attribute=None, column=None):
-        super().__init__(name, field=field, attribute=attribute)
+    namespace = 'sql'
+    def __init__(self, field=None, attribute=None, column=None):
+        super().__init__(field=field, attribute=attribute)
         self.column = column
 
     @classmethod
@@ -2694,133 +2595,8 @@ class SQLDateBetweenFilter(SQLAlchemyBaseFilter, DateBetweenFilter):
         return self.column.between(value[0], value[1])
 
 
-SQL_FILTER_NAMES = (
-    (SQLEqualFilter, None),
-    (SQLEqualFilter, "eq"),
-    (SQLNotEqualFilter, "ne"),
-    (SQLLessThanFilter, "lt"),
-    (SQLLessThanEqualFilter, "lte"),
-    (SQLGreaterThanFilter, "gt"),
-    (SQLGreaterThanEqualFilter, "gte"),
-    (SQLInFilter, "in"),
-    (SQLContainsFilter, "contains"),
-    (SQLStringContainsFilter, "contains"),
-    (SQLStringIContainsFilter, "icontains"),
-    (SQLStartsWithFilter, "startswith"),
-    (SQLIStartsWithFilter, "istartswith"),
-    (SQLEndsWithFilter, "endswith"),
-    (SQLIEndsWithFilter, "iendswith"),
-    (SQLDateBetweenFilter, "between"),
-)
-
-SQL_FILTERS_BY_TYPE = (
-    (Uri, (SQLEqualFilter, SQLNotEqualFilter, SQLInFilter)),
-    (ItemUri, (SQLEqualFilter, SQLNotEqualFilter, SQLInFilter)),
-    (Boolean, (SQLEqualFilter, SQLNotEqualFilter, SQLInFilter)),
-    (
-        Integer,
-        (
-            SQLEqualFilter,
-            SQLNotEqualFilter,
-            SQLLessThanFilter,
-            SQLLessThanEqualFilter,
-            SQLGreaterThanFilter,
-            SQLGreaterThanEqualFilter,
-            SQLInFilter,
-        ),
-    ),
-    (
-        Number,
-        (
-            SQLEqualFilter,
-            SQLNotEqualFilter,
-            SQLLessThanFilter,
-            SQLLessThanEqualFilter,
-            SQLGreaterThanFilter,
-            SQLGreaterThanEqualFilter,
-            SQLInFilter,
-        ),
-    ),
-    (
-        String,
-        (
-            SQLEqualFilter,
-            SQLNotEqualFilter,
-            SQLStringContainsFilter,
-            SQLStringIContainsFilter,
-            SQLStartsWithFilter,
-            SQLIStartsWithFilter,
-            SQLEndsWithFilter,
-            SQLIEndsWithFilter,
-            SQLInFilter,
-        ),
-    ),
-    (
-        Date,
-        (
-            SQLEqualFilter,
-            SQLNotEqualFilter,
-            SQLLessThanFilter,
-            SQLLessThanEqualFilter,
-            SQLGreaterThanFilter,
-            SQLGreaterThanEqualFilter,
-            SQLDateBetweenFilter,
-            SQLInFilter,
-        ),
-    ),
-    (
-        DateTime,
-        (
-            SQLEqualFilter,
-            SQLNotEqualFilter,
-            SQLLessThanFilter,
-            SQLLessThanEqualFilter,
-            SQLGreaterThanFilter,
-            SQLGreaterThanEqualFilter,
-            SQLDateBetweenFilter,
-        ),
-    ),
-    (
-        DateString,
-        (
-            SQLEqualFilter,
-            SQLNotEqualFilter,
-            SQLLessThanFilter,
-            SQLLessThanEqualFilter,
-            SQLGreaterThanFilter,
-            SQLGreaterThanEqualFilter,
-            SQLDateBetweenFilter,
-            SQLInFilter,
-        ),
-    ),
-    (
-        DateTimeString,
-        (
-            SQLEqualFilter,
-            SQLNotEqualFilter,
-            SQLLessThanFilter,
-            SQLLessThanEqualFilter,
-            SQLGreaterThanFilter,
-            SQLGreaterThanEqualFilter,
-            SQLDateBetweenFilter,
-        ),
-    ),
-    (Array, (SQLContainsFilter,)),
-    (
-        ToOne,
-        (
-            SQLEqualFilter,
-            SQLNotEqualFilter,
-            SQLInFilter,
-        ),
-    ),
-    (ToMany, (SQLContainsFilter,)),
-)
-
-
 class SQLAlchemyManager(RelationalManager):
-    FILTER_NAMES = SQL_FILTER_NAMES
-    FILTERS_BY_TYPE = SQL_FILTERS_BY_TYPE
+    base_filter = SQLAlchemyBaseFilter
     PAGINATION_TYPES = (Pagination, SAPagination)
 
     def __init__(self, resource, model):

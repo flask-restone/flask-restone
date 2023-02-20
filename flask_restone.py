@@ -1,5 +1,7 @@
 """
 restone makes you the rest one
+restone 是集成了自动路由,过滤器,格式与字段校验，基于用户、角色、内容的鉴权，自动Swager接口自测
+的Restful 的API
 """
 import calendar
 import datetime
@@ -35,13 +37,17 @@ from werkzeug.wrappers import Response
 
 # ---------------------------HTTP常量--------------------
 HTTP_METHODS = ("GET", "PUT", "POST", "PATCH", "DELETE")
-HTTP_METHOD_VERB_DEFAULTS = {
-    "GET": "read",
-    "PUT": "create",
-    "POST": "create",
-    "PATCH": "update",
-    "DELETE": "destroy",
-}
+HTTP_METHOD_VERB_DEFAULTS = {"GET": "read", "PUT": "create", "POST": "create", "PATCH": "update", "DELETE": "destroy"}
+
+PERMISSION_DEFAULTS = (("read", "yes"), ("create", "no"), ("update", "create"), ("delete", "update"))
+
+DEFAULT_METHODS = ("read", "create", "update", "delete")
+
+METHOD_ROUTE_RELATIONS = (("read", ("read", "instances")), ("create", ("create",)), ("update", ("update",)), ("delete", ("destroy",)))
+
+PERMISSION_DENIED_STRINGS = ("no", "nobody", "noone")
+PERMISSION_GRANTED_STRINGS = ("yes", "everybody", "anybody", "everyone", "anyone")
+
 
 # ---------------------------信号量--------------------
 _restone = Namespace()
@@ -116,10 +122,7 @@ class RestoneValidationError(RestoneException):
 
     def _format_errors(self):
         for error in self.errors:
-            error_data = {
-                "validationOf": {error.validator: error.validator_value},
-                "path": self._complete_path(error),
-            }
+            error_data = {"validationOf": {error.validator: error.validator_value}, "path": self._complete_path(error)}
             if current_app.debug:
                 error_data["message"] = error.message
             yield error_data
@@ -274,6 +277,7 @@ class FieldSet(Schema, ResourceMixin):  # 字段集 规则和资源绑定
             "additionalProperties": False,
             "properties": OrderedDict(((key, field.request) for (key, field) in self.fields.items() if "u" in field.io)),
         }  # 请求的可更新属性
+
         for key, field in self.fields.items():
             if "c" in field.io and (not field.nullable) and (field.default is None):
                 self.required.add(key)  # 不为空且无默认则为必填项
@@ -306,14 +310,7 @@ class FieldSet(Schema, ResourceMixin):  # 字段集 规则和资源绑定
             )
         )
 
-    def convert(
-        self,
-        instance,
-        update=False,
-        pre_resolved_properties=None,
-        patchable=False,
-        strict=False,
-    ):  # 格式转换和检查
+    def convert(self, instance, update=False, pre_resolved_properties=None, patchable=False, strict=False):  # 格式转换和检查
         result = dict(pre_resolved_properties) if pre_resolved_properties else {}
         if patchable:
             object_ = self.patchable.convert(instance, update)  # 就是基类的转化校验
@@ -327,9 +324,7 @@ class FieldSet(Schema, ResourceMixin):  # 字段集 规则和资源绑定
             value = None
             try:
                 value = object_[key]  # 转换校验后字典
-                value = field.convert(
-                    value,
-                )  # 字段本身的转换
+                value = field.convert(value, validate=False)  # 字段本身的转换
             except KeyError:  # 如果字典中没有当前的键
                 if patchable:
                     continue
@@ -363,11 +358,7 @@ class FieldSet(Schema, ResourceMixin):  # 字段集 规则和资源绑定
                         data[name] = value  # 类型错误直接赋值
                 except KeyError:
                     pass
-        return self.convert(
-            data,
-            update=request.method in ("PUT", "PATCH"),
-            patchable=request.method == "PATCH",
-        )
+        return self.convert(data, update=request.method in ("PUT", "PATCH"), patchable=request.method == "PATCH")
 
 
 def _bind_schema(schema, resource) -> Schema:  # 将格式与资源绑定
@@ -378,16 +369,7 @@ def _bind_schema(schema, resource) -> Schema:  # 将格式与资源绑定
 
 # ----------------字段格式------------
 class BaseField(Schema):
-    def __init__(
-        self,
-        schema,
-        io="rw",
-        default=None,
-        attribute=None,
-        nullable=False,
-        title=None,
-        description=None,
-    ):
+    def __init__(self, schema, io="rw", default=None, attribute=None, nullable=False, title=None, description=None):
         self._schema = schema  # 字段格式
         self._default = default  # 字段默认
         self.attribute = attribute  # 名称
@@ -402,7 +384,8 @@ class BaseField(Schema):
             schema["readOnly"] = True
         if "null" in schema.get("type", []):  # type 就是类型
             self.nullable = True
-        elif self.nullable:
+
+        if self.nullable:  # ??
             if "enum" in schema and None not in schema["enum"]:
                 # 可以为空且枚举列表里没null
                 schema["enum"].append(None)
@@ -454,14 +437,8 @@ class BaseField(Schema):
         elif isinstance(schema, tuple):
             (read_schema, write_schema) = schema
         else:
-            return (
-                self._finalize_schema(schema, "r"),
-                self._finalize_schema(schema, "w"),
-            )
-        return (
-            self._finalize_schema(read_schema, "r"),
-            self._finalize_schema(write_schema, "w"),
-        )
+            return self._finalize_schema(schema, "r"), self._finalize_schema(schema, "w")
+        return self._finalize_schema(read_schema, "r"), self._finalize_schema(write_schema, "w")
 
     def format(self, value):
         return self.formatter(value) if value is not None else value
@@ -515,19 +492,12 @@ class String(BaseField):
         schema = {"type": "string"}
         if enum is not None:
             enum = list(enum)
-        for v, k in (
-            (min_length, "minLength"),
-            (max_length, "maxLength"),
-            (pattern, "pattern"),
-            (enum, "enum"),
-            (format, "format"),
-        ):
+        for v, k in ((min_length, "minLength"), (max_length, "maxLength"), (pattern, "pattern"), (enum, "enum"), (format, "format")):
             if v is not None:
                 schema[k] = v
         super().__init__(schema, **kwargs)
 
 
-# id = UUID(io='r')
 class UUID(String):
     UUID_REGEX = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
@@ -547,14 +517,7 @@ class Email(String):
 
 class Date(BaseField):
     def __init__(self, **kwargs):
-        super().__init__(
-            {
-                "type": "object",
-                "properties": {"$date": {"type": "integer"}},
-                "additionalProperties": False,
-            },
-            **kwargs,
-        )
+        super().__init__({"type": "object", "properties": {"$date": {"type": "integer"}}, "additionalProperties": False}, **kwargs)
 
     def formatter(self, value):  # 时间戳
         return {"$date": int(calendar.timegm(value.timetuple()) * 1000)}
@@ -644,21 +607,9 @@ class Array(BaseField, ResourceMixin):
     def __init__(self, schema_cls_or_obj, min_items=None, max_items=None, unique=None, **kwargs):
         self.container = container = _field_from_object(self, schema_cls_or_obj)
         schema_properties = [("type", "array")]
-        schema_properties += [
-            (k, v)
-            for (k, v) in [
-                ("minItems", min_items),
-                ("maxItems", max_items),
-                ("uniqueItems", unique),
-            ]
-            if v is not None
-        ]
+        schema_properties += [(k, v) for (k, v) in [("minItems", min_items), ("maxItems", max_items), ("uniqueItems", unique)] if v is not None]
         schema = lambda s: dict([("items", s)] + schema_properties)
-        super().__init__(
-            lambda: (schema(container.response), schema(container.request)),
-            default=kwargs.pop("default", list),
-            **kwargs,
-        )
+        super().__init__(lambda: (schema(container.response), schema(container.request)), default=kwargs.pop("default", list), **kwargs)
 
     def bind(self, resource):
         if isinstance(self.container, ResourceMixin):
@@ -749,24 +700,10 @@ class Object(BaseField, ResourceMixin):
     def converter(self, instance):
         result = {}
         if self.properties:
-            result = {
-                field.attribute
-                or key: field.convert(
-                    instance.get(key, field.default),
-                )
-                for (key, field) in self.properties.items()
-            }
+            result = {field.attribute or key: field.convert(instance.get(key, field.default)) for (key, field) in self.properties.items()}
         if self.pattern_props:
             field = next(iter(self.pattern_props.values()))
-            result.update(
-                {
-                    key: field.convert(
-                        value,
-                    )
-                    for (key, value) in instance.items()
-                    if key not in result
-                }
-            )
+            result.update({key: field.convert(value) for (key, value) in instance.items() if key not in result})
         elif self.other_props:
             field = self.other_props
             result.update({key: field.convert(value) for (key, value) in instance.items() if key not in result})
@@ -796,15 +733,7 @@ class AttributeMapped(Object):
     def converter(self, value):
         if self.pattern_props:
             field = next(iter(self.pattern_props.values()))
-            return [
-                self._set_mapping_attribute(
-                    field.convert(
-                        v,
-                    ),
-                    k,
-                )
-                for (k, v) in value.items()
-            ]
+            return [self._set_mapping_attribute(field.convert(v), k) for (k, v) in value.items()]
         if self.other_props:
             return [self._set_mapping_attribute(self.other_props.convert(v), k) for (k, v) in value.items()]
         return {}
@@ -828,13 +757,7 @@ class ToOne(BaseField, ResourceMixin):
     def rebind(self, resource):
         if self.target_reference.value == "self":
             return self.__class__(
-                "self",
-                default=self.default,
-                attribute=self.attribute,
-                nullable=self.nullable,
-                title=self.title,
-                description=self.description,
-                io=self.io,
+                "self", default=self.default, attribute=self.attribute, nullable=self.nullable, title=self.title, description=self.description, io=self.io
             ).bind(resource)
         return self
 
@@ -850,16 +773,9 @@ class ToOne(BaseField, ResourceMixin):
         return self.formatter_key.format(item)  # 响应
 
     def converter(self, value):  # 转换器
-        for python_type, json_type in (
-            (dict, "object"),
-            (int, "integer"),
-            ((list, tuple), "array"),
-            ((str, bytes), "string"),
-        ):
+        for python_type, json_type in ((dict, "object"), (int, "integer"), ((list, tuple), "array"), ((str, bytes), "string")):
             if isinstance(value, python_type):
-                return self.target.meta.key_converters_by_type[json_type].convert(
-                    value,
-                )
+                return self.target.meta.key_converters_by_type[json_type].convert(value)
 
 
 class ToMany(Array):
@@ -867,8 +783,9 @@ class ToMany(Array):
         super().__init__(ToOne(resource, nullable=False), **kwargs)
 
 
+#
 class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新 todo 设置可更新
-    def __init__(self, resource, patchable=False, **kwargs):
+    def __init__(self, resource, patchable=True, **kwargs):
         self.target_reference = ResourceReference(resource)
         self.patchable = patchable
 
@@ -876,6 +793,7 @@ class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新 todo 设置
             def _response_schema():
                 if self.resource == self.target:
                     return {"$ref": "#"}
+                # print(self.target.routes["describedBy"])
                 return {"$ref": self.target.routes["describedBy"].rule_factory(self.target)}
 
             # 若可更新 self.target.schema.patchable.update 为 request 语法
@@ -909,9 +827,7 @@ class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新 todo 设置
     def convert(self, item, update=False, validate=True):  # 转换为输入 默认不可更新
         if not validate:
             raise NotImplementedError()
-        return self.target.schema.convert(
-            item,
-        )
+        return self.target.schema.convert(item, update=update, patchable=self.patchable)
 
 
 class ItemType(BaseField):
@@ -926,14 +842,7 @@ class ItemType(BaseField):
 class ItemUri(BaseField):
     def __init__(self, resource, attribute=None):
         self.target_reference = ResourceReference(resource)
-        super().__init__(
-            lambda: {
-                "type": "string",
-                "pattern": f"^{re.escape(self.target.route_prefix)}\\/[^/]+$",
-            },
-            io="r",
-            attribute=attribute,
-        )
+        super().__init__(lambda: {"type": "string", "pattern": f"^{re.escape(self.target.route_prefix)}\\/[^/]+$"}, io="r", attribute=attribute)
 
     @cached_property
     def target(self):
@@ -944,9 +853,7 @@ class ItemUri(BaseField):
 
     def converter(self, value):
         _, args = route_from(value, "GET")
-        return self.target.manager.id_field.convert(
-            args["id"],
-        )
+        return self.target.manager.id_field.convert(args["id"])
 
 
 # -------------------过滤器-------------------------------------
@@ -962,11 +869,12 @@ class Condition:  # 属性 过滤器 值
 
 class BaseFilter(Schema):
     name = None
-    namespace = 'base'
+    namespace = "base"
+
     def __init__(self, field=None, attribute=None):
         self._attribute = attribute
         self._field = field
-
+    
     @property
     def field(self):  # 被过滤的字段,只是使用field.convert
         return self._field
@@ -983,18 +891,15 @@ class BaseFilter(Schema):
     def schema(self):
         schema = self.field.request  # 过滤器只能针对请求模式，过滤器的模式就是所过滤字段的请求模式
         if schema:
-            schema = {k: v for k, v in schema.items if k != "readOnly"}
+            _schema = {k: v for k, v in schema.items() if k != "readOnly"}
+        else:
+            _schema = schema
         if self.name is None:
-            return schema
-        return {
-            "type": "object",
-            "properties": {f"${self.name}": schema},
-            "required": [f"${self.name}"],
-            "additionalProperties": False,
-        }
-    
+            return _schema
+        return {"type": "object", "properties": {f"${self.name}": _schema}, "required": [f"${self.name}"], "additionalProperties": False}
+
     @classmethod
-    def named_filters(cls): #
+    def named_filters(cls):
         dct = {}
         for c in cls.__subclasses__():
             if c.name is not None:
@@ -1002,6 +907,7 @@ class BaseFilter(Schema):
             elif c.namespace == cls.namespace:
                 dct.update(c.named_filters())
         return dct
+
 
 class EqualFilter(BaseFilter):
     name = "eq"
@@ -1048,11 +954,6 @@ class InFilter(BaseFilter):
     @cached_property
     def field(self):
         return Array(self._field, min_items=0, unique=True)
-
-
-# class NotInFilter(BaseFilter):
-#     name = "ni"
-#     op = lambda s, a, b: not a in b
 
 
 class ContainsFilter(BaseFilter):
@@ -1109,21 +1010,18 @@ class DateBetweenFilter(BaseFilter):
         return Array(self._field, min_items=2, max_items=2)
 
 
-
-
-
 FIELD_FILTERS_DICT = {
     Boolean: ("eq", "ne", "in"),
     Integer: ("eq", "ne", "lt", "lte", "gt", "gte", "in"),
     Number: ("eq", "ne", "lt", "lte", "gt", "gte", "in"),
     String: ("eq", "ne", "ct", "ict", "sw", "isw", "ew", "iew", "in"),
-    Date: ("eq", "ne", "lt", "lte", "gt", "gte", "bw", "in"),
-    DateTime: ("eq", "ne", "lt", "lte", "gt", "gte", "bw"),
-    DateString: ("eq", "ne", "lt", "lte", "gt", "gte", "bw", "in"),
-    DateTimeString: ("eq", "ne", "lt", "lte", "gt", "gte", "bw"),
+    Date: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in"),
+    DateTime: ("eq", "ne", "lt", "lte", "gt", "gte", "bt"),
+    DateString: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in"),
+    DateTimeString: ("eq", "ne", "lt", "lte", "gt", "gte", "bt"),
     Array: ("has",),
-    ToOne: ("has", "ne", "in"),
-    ToMany: ("ct",),
+    ToOne: ("eq", "ne", "in"),
+    ToMany: ("has",),
     Uri: ("eq", "ne", "in"),
     ItemUri: ("eq", "ne", "in"),
 }
@@ -1138,14 +1036,8 @@ def filters_for_field_class(field_class, field_filters_dict):
 
 
 # 字段集和对应的过滤器表达式得到的过滤器字典
-def filters_for_fields(
-    fields,
-    filters_expression,
-    field_filters_dict,
-    filters_name_dict,
-):
+def filters_for_fields(fields, filters_expression, field_filters_dict, filters_name_dict):
     filters = {}
-    # filters_by_type = dict(filters_by_type)
     for field_name, field in fields.items():
         field_filters = {name: filters_name_dict[name] for name in filters_for_field_class(field.__class__, field_filters_dict)}
         if isinstance(filters_expression, dict):
@@ -1200,10 +1092,7 @@ class PaginationMixin:  # 分页插件不能单独使用
         if data.has_next:
             links.append((request.path, data.page + 1, data.per_page, "next"))
         links.append((request.path, max(data.pages, 1), data.per_page, "last"))
-        headers = {
-            "Link": ",".join(['<{0}?page={1}&per_page={2}>; rel="{3}"'.format(*link) for link in links]),
-            "X-Total-Count": data.total,
-        }
+        headers = {"Link": ",".join(['<{0}?page={1}&per_page={2}>; rel="{3}"'.format(*link) for link in links]), "X-Total-Count": data.total}
         return self.format(data.items), 200, headers
 
 
@@ -1235,10 +1124,7 @@ def parse_where_sort_by_args(request):
 
 def parse_where_sort_by_json(request):
     where = json.loads(request.args.get("where", "{}"))
-    sort = json.loads(
-        request.args.get("sort", "{}"),
-        object_pairs_hook=OrderedDict,
-    )
+    sort = json.loads(request.args.get("sort", "{}"), object_pairs_hook=OrderedDict)
     return sort, where
 
 
@@ -1252,7 +1138,8 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
     def _pagination_types(self):
         return self.resource.manager.PAGINATION_TYPES
 
-    def _field_filters_schema(self, filters):
+    @staticmethod
+    def _field_filters_schema(filters):
         if len(filters) == 1:
             return next(iter(filters.values())).request
         return {"anyOf": [filter.request for filter in filters.values()]}
@@ -1282,10 +1169,7 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         return {
             "type": "object",
             "properties": {
-                name: {
-                    "type": "boolean",
-                    "description": f"Sort by {name} in descending order if 'true', ascending order if 'false'.",
-                }
+                name: {"type": "boolean", "description": f"Sort by {name} in descending order if 'true', ascending order if 'false'."}
                 for (name, field) in self._sort_fields.items()
             },
             "additionalProperties": False,
@@ -1394,7 +1278,7 @@ class Manager:
             field_set.set("$type", ItemType(resource))
 
     def _init_filter(self, filter_class, name, field, attribute):
-        return filter_class(name, field=field, attribute=field.attribute or attribute)
+        return filter_class(field=field, attribute=field.attribute or attribute)
 
     def _init_filters(self, resource, meta):
         fields = resource.schema.fields
@@ -1410,21 +1294,7 @@ class Manager:
         }
 
     def _is_sortable_field(self, field):
-        return isinstance(
-            field,
-            (
-                String,
-                Boolean,
-                Number,
-                Integer,
-                Date,
-                DateTime,
-                DateString,
-                DateTimeString,
-                Uri,
-                ItemUri,
-            ),
-        )
+        return isinstance(field, (String, Boolean, Number, Integer, Date, DateTime, DateString, DateTimeString, Uri, ItemUri))
 
     def _init_key_converters(self, resource, meta):
         if "natural_key" in meta:
@@ -1597,12 +1467,7 @@ class RefKey(Key):
     def schema(self):
         return {
             "type": "object",
-            "properties": {
-                "$ref": {
-                    "type": "string",
-                    "pattern": f"^{re.escape(self.resource.route_prefix)}\\/[^/]+$",
-                }
-            },
+            "properties": {"$ref": {"type": "string", "pattern": f"^{re.escape(self.resource.route_prefix)}\\/[^/]+$"}},
             "additionalProperties": False,
         }
 
@@ -1649,11 +1514,7 @@ class PropertiesKey(Key):
         return self.__class__(*self.properties).bind(resource)
 
     def schema(self):
-        return {
-            "type": "array",
-            "items": [self.resource.schema.fields[p].request for p in self.properties],
-            "additionalItems": False,
-        }
+        return {"type": "array", "items": [self.resource.schema.fields[p].request for p in self.properties], "additionalItems": False}
 
     def format(self, item):
         return [self.resource.schema.fields[p].output(p, item) for p in self.properties]
@@ -1679,11 +1540,7 @@ class IDKey(Key):
         return self.id_field.output(self.resource.manager.id_attribute, item)
 
     def convert(self, value):
-        return self.resource.manager.read(
-            self.id_field.convert(
-                value,
-            )
-        )
+        return self.resource.manager.read(self.id_field.convert(value))
 
 
 def url_rule_to_uri_pattern(rule):
@@ -1730,12 +1587,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                 relation_instances,
                 rel=self.attribute,
                 response_schema=RelationInstances(self.target),
-                schema=FieldSet(
-                    {
-                        "page": Integer(minimum=1, default=1),
-                        "per_page": Integer(minimum=1, default=20, maximum=50),
-                    }
-                ),
+                schema=FieldSet({"page": Integer(minimum=1, default=1), "per_page": Integer(minimum=1, default=20, maximum=50)}),
             )
         if "w" in io or "u" in io:
             # book  #author
@@ -1746,11 +1598,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                 return target_item
 
             yield relations_route.for_method(
-                "POST",
-                relation_add,
-                rel=to_camel_case(f"add_{self.attribute}"),
-                response_schema=ToOne(self.target),
-                schema=ToOne(self.target),
+                "POST", relation_add, rel=to_camel_case(f"add_{self.attribute}"), response_schema=ToOne(self.target), schema=ToOne(self.target)
             )
 
             def relation_remove(resource, item, target_id):
@@ -1759,11 +1607,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                 resource.manager.commit()
                 return None, 204
 
-            yield relation_route.for_method(
-                "DELETE",
-                relation_remove,
-                rel=to_camel_case(f"remove_{self.attribute}"),
-            )
+            yield relation_route.for_method("DELETE", relation_remove, rel=to_camel_case(f"remove_{self.attribute}"))
 
 
 def route_from(url, method=None):
@@ -1876,14 +1720,7 @@ class Route:
         request_schema = _bind_schema(self.request_schema, resource)
         response_schema = _bind_schema(self.response_schema, resource)
         schema = OrderedDict(
-            [
-                ("rel", self.relation),  # 关联
-                (
-                    "href",
-                    url_rule_to_uri_pattern(self.rule_factory(resource, relative=False)),
-                ),
-                ("method", self.method),
-            ]
+            [("rel", self.relation), ("href", url_rule_to_uri_pattern(self.rule_factory(resource, relative=False))), ("method", self.method)]  # 关联
         )
         if self.title:
             schema["title"] = self.title
@@ -2051,13 +1888,7 @@ class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
 
                 return get_value(attribute, item, field.default)
 
-            yield route.for_method(
-                "POST",
-                update_attribute,
-                schema=field,
-                response_schema=field,
-                rel=to_camel_case(f"update_{route.attribute}"),
-            )
+            yield route.for_method("POST", update_attribute, schema=field, response_schema=field, rel=to_camel_case(f"update_{route.attribute}"))
 
 
 def _make_response(data, code, headers=None):
@@ -2065,6 +1896,7 @@ def _make_response(data, code, headers=None):
     if current_app.debug:
         settings.setdefault("indent", 4)
         settings.setdefault("sort_keys", True)
+    print(data)
     data = json.dumps(data, **settings)
     resp = make_response(data, code)
     resp.headers.extend(headers or {})
@@ -2128,26 +1960,34 @@ class ResourceMeta(type):
                 add_route(routes, m, n)
             if hasattr(base, "Meta"):
                 meta.update(base.Meta.__dict__)
+        schema = {}
         if "Meta" in members:
             changes = members["Meta"].__dict__
             for k, v in changes.items():
                 if not k.startswith("__"):
                     meta[k] = v
+            # 20日新增功能，指定默认日期
+            model = meta.get("model", None)
+            datetime_field_class = meta.get("datetime_formater")
+            if model and datetime_field_class:
+                for k, field in model.__dict__.items():
+                    if not k.startswith("__") and hasattr(field, "type"):
+                        if str(field.type) == "DATETIME":
+                            schema[k] = datetime_field_class(io="r")
+
             if not changes.get("name", None):
                 meta["name"] = name.lower()
         else:
             meta["name"] = name.lower()
-        schema = {}
+
         for base in bases:
             if hasattr(base, "Schema"):
                 schema.update(base.Schema.__dict__)
         if "Schema" in members:
             schema.update(members["Schema"].__dict__)
         if schema:
-            class_.schema = fs = FieldSet(
-                {k: f for (k, f) in schema.items() if not k.startswith("__")},
-                required_fields=meta.get("required_fields", None),
-            )
+            class_.schema = fs = FieldSet({k: f for (k, f) in schema.items() if not k.startswith("__")}, required_fields=meta.get("required_fields", None))
+
             for name in meta.get("read_only_fields", ()):
                 if name in fs.fields:
                     fs.fields[name].io = "r"
@@ -2199,7 +2039,30 @@ class Resource(metaclass=ResourceMeta):
 
 
 # todo ：设计一个以pandas为后端的资源，和资源管理器
+class FilterMeta(type):
+    def __new__(mcs, name, bases, members):
+        if "name" in members:
+            name = members['name']
+        if "op" in members:
+            func = members['op']
+            members['op'] = classmethod(lambda s,a,b:func(a,b))
+        class_ = super(FilterMeta, mcs).__new__(mcs, name, bases, members)
+        return class_
 
+def filter(name,func):
+    return FilterMeta(name,(object,),{'op':func})
+# op = FilterMeta('lt',(object,),{'op':lambda x,y:x<y})
+lt = filter('lt',lambda x,y:x<y)
+gt = filter('gt',lambda x,y:x>y)
+# class XX(metaclass=FilterMeta):
+#     name = 'op'
+#     op = lambda x,y:x<y
+
+
+# s = op
+# print(s.__name__)
+# x = s.op(1,2)
+# print(x)
 
 # 模型资源是专门为数据库orm设计的资源
 class ModelResourceMeta(ResourceMeta):
@@ -2228,16 +2091,19 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
 
     @instances.POST(rel="create")  # 明白了rel是内部用的用于定位视图的，作为key
     def create(self, properties):
-        item = self.manager.create(properties)
+        props = {}
+        for k, v in properties.items():
+            if isinstance(v, dict) and v["type"] == "object":
+                inst = v["resource"].manager.create(v["instance"])
+                props[f"{k}_id"] = inst.id
+            else:
+                props[k] = v
+        item = self.manager.create(props)
         return item
 
     create.request_schema = create.response_schema = Inline("self")
 
-    @Route.GET(
-        lambda r: f"/<{r.meta.id_converter}:id>",
-        rel="self",
-        attribute="instance",
-    )
+    @Route.GET(lambda r: f"/<{r.meta.id_converter}:id>", rel="self", attribute="instance")
     def read(self, id):
         return self.manager.read(id)
 
@@ -2272,16 +2138,12 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         include_fields = None  # 包括
         exclude_fields = None  # 不包括
         filters = True  # 过滤
-        permissions = {
-            "read": "anyone",
-            "create": "nobody",
-            "update": "create",
-            "delete": "update",
-        }
+        permissions = {"read": "anyone", "create": "nobody", "update": "create", "delete": "update"}
         postgres_text_search_fields = ()
         postgres_full_text_index = None
         cache = False  # 缓存
         key_converters = (RefKey(), IDKey())
+        datetime_formater = DateTimeString
         natural_key = None
 
 
@@ -2294,52 +2156,21 @@ def schema_to_swag_dict(schema, tags=None):
     elif rel.startswith("update"):
         parameters = [
             {"name": "id", "type": "string", "in": "path", "required": True, "description": "the data source's uuid"},
-            {
-                "name": "Item",
-                "in": "body",
-                "schema": schema.get("schema", {}),
-            },
+            {"name": "Item", "in": "body", "schema": schema.get("schema", {})},
         ]
     elif rel == "instances":
-        parameters = [
-            {"name": "name", "type": "string", "in": "query", "default": ""},
-            {"name": "type", "type": "string", "in": "query", "enum": ["线上", "批量"]},
-            {
-                "name": "status",
-                "in": "query",
-                "type": "string",
-                "enum": ("运行中", "已停止"),
-            },
-        ]
+        parameters = []  # 查询的字段在参数里
     elif rel == "create":
-        parameters = [
-            {
-                "name": "Item",
-                "in": "body",
-                "schema": schema.get("schema", {}),
-            },
-        ]
+        parameters = [{"name": "Item", "in": "body", "schema": schema.get("schema", {})}]
     else:
         print(rel)
 
-    dct = {
-        "tags": tags,
-        "parameters": parameters,
-        "responses": {"200": {"description": "正常返回", "examples": {"result": "success"}}},
-    }
+    dct = {"tags": tags, "parameters": parameters, "responses": {"200": {"description": "正常返回", "examples": {"result": "success"}}}}
     return dct
 
 
 class Api:
-    def __init__(
-        self,
-        app=None,
-        decorators=None,
-        prefix=None,
-        title=None,
-        description=None,
-        default_manager=None,
-    ):
+    def __init__(self, app=None, decorators=None, prefix=None, title=None, description=None, default_manager=None):
         self.app = app
         self.blueprint = None
         self.prefix = prefix or ""
@@ -2373,12 +2204,7 @@ class Api:
         app.config.setdefault("RESTONE_DEFAULT_PARSE_STYLE", "args")
         app.config.setdefault("RESTONE_DECORATE_SCHEMA_ENDPOINTS", True)
         self._register_view(
-            app,
-            rule="".join((self.prefix, "/schema")),
-            view_func=self._schema_view,
-            endpoint="schema",
-            methods=["GET"],
-            relation="describedBy",
+            app, rule="".join((self.prefix, "/schema")), view_func=self._schema_view, endpoint="schema", methods=["GET"], relation="describedBy"
         )
         for route, resource, view_func, endpoint, methods, relation in self.views:
             rule = route.rule_factory(resource)
@@ -2391,10 +2217,7 @@ class Api:
         """注册到swager"""
         with app.app_context():
             schema = route.schema_factory(resource)
-            tags = [
-                resource.meta.title or resource.meta.name,
-            ]
-            print(schema)
+            tags = [resource.meta.title or resource.meta.name]
             if schema["rel"] != "describedBy":
                 swag_from(schema_to_swag_dict(schema, tags))(view_func)
 
@@ -2493,9 +2316,10 @@ class Api:
         self.resources[resource.meta.name] = resource
 
 
-# 使用的时候 user = InlineModel({name},User)
+# 使用的时候
 class InlineModel(Object):
     def __init__(self, properties, model, **kwargs):
+        print(properties)
         super().__init__(properties, **kwargs)
         self.model = model
 
@@ -2506,8 +2330,34 @@ class InlineModel(Object):
         return instance
 
 
+# 内联模型资源
+class InlineResource(BaseField):
+    def __init__(self, resource, **kwargs):
+        self.model = resource.meta.model
+        self.resource = resource
+
+        def schema():
+            request_schema = {"type": "object"}
+            response_schema = {"type": "object"}
+            for schema, attr in ((request_schema, "request"), (response_schema, "response")):
+                schema["properties"] = {k: getattr(f, attr) for (k, f) in resource.schema.fields.items()}
+                schema["additionalProperties"] = False
+
+            return response_schema, request_schema
+
+        super().__init__(schema, **kwargs)
+
+    def formatter(self, value):
+        return {k: f.format(get_value(f.attribute or k, value, f.default)) for (k, f) in self.resource.schema.fields.items()}
+
+    def converter(self, instance):
+        instance = super().converter(instance)
+        return {"type": "object", "resource": self.resource, "instance": instance}
+
+
 class SQLAlchemyBaseFilter(BaseFilter):
-    namespace = 'sql'
+    namespace = "sql"
+
     def __init__(self, field=None, attribute=None, column=None):
         super().__init__(field=field, attribute=attribute)
         self.column = column
@@ -2699,12 +2549,7 @@ class SQLAlchemyManager(RelationalManager):
         return field_class(*args, io=io, attribute=attribute, **kwargs)
 
     def _init_filter(self, filter_class, name, field, attribute):
-        return filter_class(
-            name,
-            field=field,
-            attribute=field.attribute or attribute,
-            column=getattr(self.model, field.attribute or attribute),
-        )
+        return filter_class(field=field, attribute=field.attribute or attribute, column=getattr(self.model, field.attribute or attribute))
 
     def _is_sortable_field(self, field):
         if super()._is_sortable_field(field):
@@ -3027,21 +2872,6 @@ class HybridPermission(Permission):
             if resolved_need in g.identity.provides:
                 return True
         return False
-
-
-PERMISSION_DEFAULTS = (("read", "yes"), ("create", "no"), ("update", "create"), ("delete", "update"))
-
-DEFAULT_METHODS = ("read", "create", "update", "delete")
-
-METHOD_ROUTE_RELATIONS = (
-    ("read", ("read", "instances")),
-    ("create", ("create",)),
-    ("update", ("update",)),
-    ("delete", ("destroy",)),
-)
-
-PERMISSION_DENIED_STRINGS = ("no", "nobody", "noone")
-PERMISSION_GRANTED_STRINGS = ("yes", "everybody", "anybody", "everyone", "anyone")
 
 
 class PrincipalMixin:  # 鉴权插件

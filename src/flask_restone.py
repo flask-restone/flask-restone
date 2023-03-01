@@ -1,7 +1,6 @@
 """
 restone makes you the rest one
-restone 是集成了自动路由,过滤器,格式与字段校验，基于用户、角色、内容的鉴权，自动Swager接口自测
-的Restful 的API
+restone 是集成了自动路由,过滤器,格式与字段校验，基于用户、角色、内容的鉴权，自动Swager接口的Restful的框架
 """
 import calendar
 import datetime
@@ -51,7 +50,13 @@ HTTP_VERBS = {
     "PATCH": "update",
     "DELETE": "destroy",
 }
-
+HTTP_VERBS_CN = {
+    "create": "创建{}",
+    "destroy": "删除{}",
+    "instances": "查询{}列表",
+    "self": "查询{}详情",
+    "update": "修改{}",
+}
 PERMISSION_DEFAULTS = (
     ("read", "yes"),
     ("create", "no"),
@@ -108,6 +113,7 @@ class ItemNotFound(RestoneException):
         self.id = id
         self.where = where
 
+    @property
     def as_dict(self):
         dct = super().as_dict
         if self.id is not None:
@@ -148,6 +154,7 @@ class RestoneValidationError(RestoneException):
                 error_data["message"] = error.message
             yield error_data
 
+    @property
     def as_dict(self):
         dct = super().as_dict
         dct["errors"] = list(self._format_errors())
@@ -167,6 +174,7 @@ class BackendConflict(RestoneException):
     def __init__(self, **kwargs):
         self.data = kwargs
 
+    @property
     def as_dict(self):
         dct = super().as_dict
         dct.update(self.data)
@@ -355,7 +363,7 @@ class FieldSet(Schema, ResourceMixin):  # 字段集 规则和资源绑定
         )
 
     def faker(self):
-        return dict(
+        return OrderedDict(
             (
                 (key, field.faker())
                 # 可读字段的输出用到name和字段集，每个字段需要 output
@@ -435,8 +443,6 @@ def _bind_schema(schema, resource) -> Schema:  # 将格式与资源绑定
 
 
 # ----------------字段格式------------
-
-
 class BaseField(Schema):
     """
     基本字段模式
@@ -554,7 +560,7 @@ class BaseField(Schema):
 
     def faker(self):
         """假数据生成，用于测试"""
-        return NotImplemented
+        return "NotImplemented"
 
 
 class Any(BaseField):  # 可以用字典初始化
@@ -623,7 +629,7 @@ class String(BaseField):
             return getattr(_faker, format)()
 
         max_length = self.response.get("maxLength", 32)
-        return _faker.text(max_length)
+        return "xxxxxx"
 
 
 class UUID(String):
@@ -1513,8 +1519,8 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
 
     def faker(self):
         result = [self.resource.schema.faker() for i in range(2)]
-        if self.item_decorator is not None:
-            result = [self.item_decorator(item) for item in result]
+        # if self.item_decorator is not None:
+        #     result = [self.item_decorator(item) for item in result]
         if self.required_fields is None:
             return result
         return self._filter_required(result)
@@ -2023,10 +2029,11 @@ class ItemRoute(Route):  # 单个记录
 
 
 class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
-    def __init__(self, schema_cls_or_obj, io=None, attribute=None):
+    def __init__(self, schema_cls_or_obj, io=None, attribute=None, description=None):
         self.field = _field_from_object(ItemAttributeRoute, schema_cls_or_obj)
         self.attribute = attribute
         self.io = io
+        self.description = description
 
     def routes(self):
         io = self.io or self.field.io
@@ -2051,7 +2058,7 @@ class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
                 read_attribute,
                 response_schema=field,
                 rel=camel_case(f"read_{route.attribute}"),
-                # readDescription
+                description=self.description,
             )
         if "u" in io:  # 更新属性的路由
 
@@ -2072,6 +2079,7 @@ class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
                 schema=field,
                 response_schema=field,
                 rel=camel_case(f"update_{route.attribute}"),
+                description=self.description,
             )
 
 
@@ -2124,8 +2132,9 @@ class ResourceMeta(type):
             if model and datetime_field_class:
                 for k, field in model.__dict__.items():
                     if not k.startswith("__") and hasattr(field, "type"):
+                        print(field, field.info)
                         if str(field.type) == "DATETIME":
-                            schema[k] = datetime_field_class(io="r")
+                            schema[k] = datetime_field_class(io="r", description=field.info)
 
             if not changes.get("name", None):
                 meta["name"] = name.lower()
@@ -2137,6 +2146,7 @@ class ResourceMeta(type):
                 schema.update(base.Schema.__dict__)
         if "Schema" in members:
             schema.update(members["Schema"].__dict__)
+
         if schema:
             class_.schema = fs = FieldSet(
                 {k: f for (k, f) in schema.items() if not k.startswith("__")},
@@ -2149,6 +2159,16 @@ class ResourceMeta(type):
             for name in meta.get("write_only_fields", ()):
                 if name in fs.fields:
                     fs.fields[name].io = "w"
+            # 如果没有description默认使用同名的model里的info
+            # for k,f in fs.fields.items():
+            #     if not f.description:
+            #         model_field = getattr(model,k,None)
+            #
+            #         # print(model_field.info)
+            #         if model_field and model_field.info:
+            #             f.description = model_field.info
+            # print(model_field.info)
+
             fs.bind(class_)
         for n, m in members.items():
             if isinstance(m, Route):
@@ -2563,11 +2583,11 @@ class RelationalManager(Manager):
             # print("2", query)
         sort = tuple(self._convert_sort(sort))
         query = self._query_order_by(query, sort)
-        print("sort:::", query, type(query))
+        # print("sort:::", query, type(query))
         if options:
             query = query.with_entities(*options)  # ???@@@@
-            print("query:::", query, type(query))
-            print(query, type(query))
+            # print("query:::", query, type(query))
+            # print(query, type(query))
         return query
 
     @cached_property
@@ -3168,19 +3188,19 @@ class PrincipalMixin:  # 鉴权插件
 
         return target_manager._query_get_all(query)
 
-    def create(self, properties, commit=True):
-        if self._permissions["create"].can(properties):
+    def create(self, properties, commit=True,force=False):
+        if force or self._permissions["create"].can(properties):
             return super().create(properties, commit)
         raise Forbidden()
 
-    def update(self, item, changes, *args, **kwargs):
-        if self._permissions["update"].can(item):
-            return super().update(item, changes, *args, **kwargs)
+    def update(self, item, changes,commit=True, force=False):
+        if force or self._permissions["update"].can(item):
+            return super().update(item, changes, commit)
         raise Forbidden()
 
-    def delete(self, item):
-        if self._permissions["delete"].can(item):
-            return super().delete(item)
+    def delete(self, item,commit=True, force=False):
+        if force or self._permissions["delete"].can(item):
+            return super().delete(item,commit)
         raise Forbidden()
 
 
@@ -3235,18 +3255,18 @@ def schema_to_swag_dict(schema, tags=None):
 
 def schema_to_doc_dict(schema, route, tags=None, resource=None):
     request_json = []
+    request_args = []
+    response_args = []
+    response_json = {}
 
     rel = schema.get("rel")
     _schema = schema.get("schema", {})
-
-    if isinstance(_schema.get("properties", None), OrderedDict):
-        _schema["properties"] = {k: v for k, v in _schema["properties"].items()}
 
     if rel in ("self", "destroy") or rel.startswith("read"):
         request_args = [
             {
                 "name": "id",
-                "type": "string",
+                "type": "String",
                 "required": True,
                 "description": f"{resource.meta.name}-id",
             }
@@ -3261,38 +3281,154 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
                 "description": f"{resource.meta.name}-id",
             }
         ]
-        request_json = []
         for k, v in _schema["properties"].items():
-            one = {"name": k, "type": v["type"], "description": v.pop("description", "--"), "required": True, "value": "v2(v)"}
+            field = resource.schema.fields.get(k, None)
+            type = ""
+            if field:
+                type = "String"
+                if isinstance(field, (Date, DateTime, DateString, DateTimeString)):
+                    type = "Datetime"
+                elif isinstance(field, Integer):
+                    type = "Integer"
+            description = ""
+            if field:
+                description = field.description
+
+            if not description:
+                model_field = getattr(resource.meta.model, k, None)
+                if model_field:
+                    description = model_field.info
+            one = {
+                "name": k,
+                "type": type,
+                "description": description,
+                "required": True,
+                "value": field.faker(),
+            }
             request_json.append(one)
 
     elif rel == "instances":
-        request_args = []
-        request_json = []
-
-    elif rel == "create":
-        request_args = []
-        request_json = []
+        request_args = [
+            {
+                "name": "where",
+                "value": "{'type':'online','status':'DRAFT'}",
+                "type": "json",
+                "required": False,
+                "description": "过滤查询",
+            },
+            {
+                "name": "sort",
+                "value": "{'name':True,'status':False}",
+                "type": "json",
+                "required": False,
+                "description": "排序查询,True降序False升序",
+            },
+            {
+                "name": "page",
+                "type": "Integer",
+                "required": False,
+                "description": "页码,default=1",
+            },
+            {
+                "name": "per_page",
+                "type": "Integer",
+                "required": False,
+                "description": "每页展示数,default=20",
+            },
+        ]
+    elif rel.startswith("create"):
         for k, v in _schema["properties"].items():
-            one = {"name": k, "type": v["type"], "description": v.pop("description", "--"), "required": True, "value": "v2(v)"}
+            field = resource.schema.fields.get(k, None)
+            type = ""
+            if field:
+                type = "String"
+                if isinstance(field, (Date, DateTime, DateString, DateTimeString)):
+                    type = "Datetime"
+                elif isinstance(field, Integer):
+                    type = "Integer"
+
+            description = ""
+            if field:
+                description = field.description
+
+            if not description:
+                model_field = getattr(resource.meta.model, k, None)
+                if model_field:
+                    description = model_field.info
+
+            one = {
+                "name": k,
+                "type": type,
+                "description": description,
+                "required": True,
+                "value": field.faker(),
+            }
             request_json.append(one)
+
+    if route.response_schema:
+        data = route.response_schema.bind(resource).faker()  # stupid bug 使用Inline时要重新绑定资源
+        if isinstance(data, list):
+            xxx = data[0]
+        else:
+            xxx = data
+
+        for k, v in xxx.items():
+            field = resource.schema.fields.get(k, None)
+            type = "String"
+            if isinstance(field, (Date, DateTime, DateString, DateTimeString)):
+                type = "Datetime"
+            elif isinstance(field, Integer):
+                type = "Integer"
+
+            description = ""
+            if field:
+                description = field.description
+            if not description:
+                model_field = getattr(resource.meta.model, k, None)
+                if model_field:
+                    description = model_field.info
+            one = {
+                "name": k,
+                "value": v,
+                "type": type,
+                "description": description,
+                "required": True,
+            }
+            response_args.append(one)
+        settings = {}
+        settings.setdefault("indent", 4)
+        settings.setdefault("sort_keys", True)
+        response_json = json.dumps(data, **settings)
+        response_args.sort(key=_sort_key)
+
+    rel_cn = HTTP_VERBS_CN.get(rel, None)
+    if rel_cn:
+        title = rel_cn.format(tags[0])
     else:
-        request_args = []
-        request_json = []
+        title = rel
 
     dct = {
-        "title": tags[0],
+        "title": route.description or title,
         "url": schema["href"],
-        "content-type": "json",
+        "content_type": "text/plain" if schema["method"] == "GET" else "application/json",
         "method": schema["method"],
-        "description": rel,
+        "description": route.description or title,
         "request_args": request_args,
         "request_json": request_json,
-        "response_args": [],
-        "responses_json": {"200": {"description": "正常返回", "examples": {"result": "success"}}},
+        "response_args": response_args,
+        "response_json": response_json,
     }
-    print(dct)
     return dct
+
+
+def _sort_key(x):
+    if "time" in x["name"]:
+        return (10, x["name"])
+    if "_" in x["name"]:
+        return (9, x["name"])
+    if "$" in x["name"]:
+        return (0, x["name"])
+    return (1, x["name"])
 
 
 class Api:
@@ -3315,6 +3451,7 @@ class Api:
         self.resources = {}
         self.views = []
         self.default_manager = default_manager or SQLAlchemyManager
+        self.api_doc_list = []
         if app is not None:
             self.init_app(app)
 
@@ -3338,7 +3475,7 @@ class Api:
         app.config.setdefault("RESTONE_DEFAULT_PARSE_STYLE", "json")
         app.config.setdefault("RESTONE_DECORATE_SCHEMA_ENDPOINTS", True)
         app.config.setdefault("RESTONE_REGISTER_SWAGER_ENDPOINTS", True)
-        app.config.setdefault("RESTONE_AUTODOC_TEMPLATE", None)
+
         self._register_view(
             app,
             rule="".join((self.prefix, "/schema")),
@@ -3349,53 +3486,30 @@ class Api:
         )
         for route, resource, view_func, endpoint, methods, relation in self.views:
             rule = route.rule_factory(resource)
+            # print(route, resource, view_func, endpoint, methods, relation)
             if app.config["RESTONE_DECORATE_SCHEMA_ENDPOINTS"]:
                 self._register_swag_view(app, route, resource, view_func)
+
             self._register_view(app, rule, view_func, endpoint, methods, relation)
         app.handle_exception = partial(self._exception_handler, app.handle_exception)
         app.handle_user_exception = partial(self._exception_handler, app.handle_user_exception)
 
-    @staticmethod
-    def _register_swag_view(app, route, resource, view_func):
+    def generate_docx(self, template, filename):
+        doc = DocxTemplate(template)
+        dct = {"api_list": self.api_doc_list}
+        doc.render(dct)
+        doc.save(filename)
+
+    def _register_swag_view(self, app, route, resource, view_func):
         """注册到swager"""
         with app.app_context():
             schema = route.schema_factory(resource)
             tags = [resource.meta.title or resource.meta.name]
             if schema["rel"] != "describedBy":
                 swag_from(schema_to_swag_dict(schema, tags))(view_func)
-                try:
-                    dct = Api.docx_dict(resource, route, schema, tags)
-                except Exception:
-                    pass
-
-    @staticmethod
-    def docx_dict(app, resource, route, schema, tags):
-        if app.config["RESTONE_AUTODOC_TEMPLATE"] is None:
-            return
-        template = app.config["RESTONE_AUTODOC_TEMPLATE"]
-        dct = schema_to_doc_dict(schema, resource, tags, resource)
-        # dct['response_args'] = route.
-        if route.response_schema:
-            print(route.response_schema.response)
-            data = route.response_schema.faker()
-            response_args = []
-            if isinstance(data, list):
-                xxx = data[0]
-            else:
-                xxx = data
-            for k, v in xxx.items():
-                one = {"name": k, "value": v, "type": "string", "description": "--", "required": True}
-                response_args.append(one)
-            settings = {}
-            settings.setdefault("indent", 4)
-            settings.setdefault("sort_keys", True)
-            data = json.dumps(data, **settings)
-            dct["response_json"] = data
-            dct["response_args"] = response_args
-        doc = DocxTemplate(template)  # fix
-        doc.render(dct)
-        doc.save(os.path.join(os.path.dirname(template), dct["description"] + ".docx"))
-        return dct
+                dct = schema_to_doc_dict(schema, route, tags, resource)
+                print(resource.meta.title, dct)
+                self.api_doc_list.append(dct)
 
     def _register_view(self, app, rule, view_func, endpoint, methods, relation):
         decorate_view_func = relation != "describedBy" or app.config["RESTONE_DECORATE_SCHEMA_ENDPOINTS"]

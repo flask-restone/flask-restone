@@ -11,6 +11,7 @@ from functools import partial, wraps
 from importlib import import_module
 from operator import attrgetter, itemgetter
 from types import MethodType
+from uuid import uuid4
 
 import exrex
 from aniso8601 import parse_date, parse_datetime
@@ -585,7 +586,6 @@ class Custom(BaseField):  # 自定义字段
         return self._converter(value)
 
 
-# status = String(1,10,enum=["low","high"])
 class String(BaseField):
     url_rule_converter = "string"
 
@@ -626,16 +626,22 @@ class String(BaseField):
             return getattr(_faker, format)()
 
         max_length = self.response.get("maxLength", 32)
-        return "xxxxxx"
+        return f"test-{self.description}"
 
 
 class UUID(String):
     UUID_REGEX = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
     def __init__(self, **kwargs):
-        super().__init__(min_length=36, max_length=36, pattern=self.UUID_REGEX, **kwargs)
+        super().__init__(min_length=36, max_length=36, pattern=self.UUID_REGEX,**kwargs)
 
 
+class Path(String):
+    def __init__(self,level=1,**kwargs):
+        pattern = "/[\w]+"*level
+        super().__init__(pattern=pattern,**kwargs)
+
+       
 class Uri(String):
     def __init__(self, **kwargs):
         super().__init__(format="uri", **kwargs)
@@ -829,7 +835,7 @@ class Array(BaseField, ResourceMixin):
         return [self.container.convert(v) for v in value]
 
     def faker(self):
-        return [self.container.faker() for i in range(2)]
+        return [self.container.faker() for _ in range(2)]
 
 
 class Object(BaseField, ResourceMixin):
@@ -1269,7 +1275,7 @@ NotEqualFilter = filter_factory("ne", lambda a, b: a != b)
 LessThanEqualFilter = filter_factory("lte", lambda a, b: a <= b)
 GreaterThanEqualFilter = filter_factory("gte", lambda a, b: a >= b)
 InFilter = filter_factory("in", lambda a, b: a in b)
-NotInFilter = filter_factory('ni',lambda a,b:not a in b)
+NotInFilter = filter_factory('ni',lambda a, b: not a in b)
 ContainsFilter = filter_factory("has", lambda a, b: hasattr(a, "__iter__") and b in a)
 StringContainsFilter = filter_factory("ct", lambda a, b: a and b in a)
 StringIContainsFilter = filter_factory("ict", lambda a, b: a and b.lower() in a.lower())
@@ -1795,7 +1801,7 @@ def unpack(value):
     if not isinstance(value, tuple):
         return value, 200, {}
     if len(value) == 2:
-        return *value, {}
+        return value[0], value[1], {}
     if len(value) == 3:
         return value
     return value, 200, {}
@@ -2289,6 +2295,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
     @classmethod
     def faker(cls):
         return {k:f.faker() for k,f in cls.schema.fields.items()}
+    
     
     class Schema:  # 设置各个字段的语法用的
         pass
@@ -2923,7 +2930,7 @@ class HybridNeed:  # 混合需求
     def __call__(self, item):
         raise NotImplementedError()
 
-    def __hash__(self):
+    def __hash__(self): # 需要可以放到 set 里
         return hash(self.__repr__())
 
     def identity_get_item_needs(self):

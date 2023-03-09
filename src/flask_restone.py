@@ -1,12 +1,9 @@
-"""
-restone makes you the rest one
-restone 是集成了自动路由,过滤器,格式与字段校验，基于用户、角色、内容的鉴权，自动Swager接口的Restful的框架
-"""
+# restone makes you the rest one
+
 import calendar
 import datetime
 import decimal
 import inspect
-import os
 import random
 import re
 from collections import OrderedDict
@@ -1300,7 +1297,7 @@ class SQLAlchemyBaseFilter(BaseFilter):
 class SQLEqualFilter(SQLAlchemyBaseFilter, EqualFilter):
     def expression(self, value):
         return self.column == value
-
+        
 
 class SQLNotEqualFilter(SQLAlchemyBaseFilter, NotEqualFilter):
     def expression(self, value):
@@ -2231,7 +2228,7 @@ class ModelResourceMeta(ResourceMeta):
 
 class ModelResource(Resource, metaclass=ModelResourceMeta):
     manager = None
-
+    
     @Route.GET("", rel="instances")
     def instances(self, **kwargs):
         return self.manager.paginated_instances(**kwargs)
@@ -2282,7 +2279,11 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
     def destroy(self, id):
         self.manager.delete_by_id(id)
         return None, 204
-
+    
+    @classmethod
+    def faker(cls):
+        return {k:f.faker() for k,f in cls.schema.fields.items()}
+    
     class Schema:  # 设置各个字段的语法用的
         pass
 
@@ -3423,12 +3424,12 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
 
 def _sort_key(x):
     if "time" in x["name"]:
-        return (10, x["name"])
+        return 10, x["name"]
     if "_" in x["name"]:
-        return (9, x["name"])
+        return 9, x["name"]
     if "$" in x["name"]:
-        return (0, x["name"])
-    return (1, x["name"])
+        return 0, x["name"]
+    return 1, x["name"]
 
 
 class Api:

@@ -67,7 +67,7 @@ METHOD_ROUTE_RELATIONS = (
     ("update", ("update",)),
     ("delete", ("destroy",)),
 )
-PERMISSION_DENIED_STRINGS = ("no", "nobody", "noone")
+PERMISSION_DENIED_STRINGS = ("no", "nobody", "none")
 PERMISSION_GRANTED_STRINGS = ("yes", "everybody", "anybody", "everyone", "anyone")
 
 # ---------------------------信号量--------------------
@@ -1210,7 +1210,7 @@ class BaseFilter(Schema):
     def field(self):  # 被过滤的字段,只是使用field.convert
         if self.name in ("eq", "ne"):
             return self._field
-        if self.name == "in":
+        if self.name in ("in","ni"):
             return Array(self._field, min_items=0, unique=True)
         if self.name == "has":
             return self._field.container
@@ -1269,6 +1269,7 @@ NotEqualFilter = filter_factory("ne", lambda a, b: a != b)
 LessThanEqualFilter = filter_factory("lte", lambda a, b: a <= b)
 GreaterThanEqualFilter = filter_factory("gte", lambda a, b: a >= b)
 InFilter = filter_factory("in", lambda a, b: a in b)
+NotInFilter = filter_factory('ni',lambda a,b:not a in b)
 ContainsFilter = filter_factory("has", lambda a, b: hasattr(a, "__iter__") and b in a)
 StringContainsFilter = filter_factory("ct", lambda a, b: a and b in a)
 StringIContainsFilter = filter_factory("ict", lambda a, b: a and b.lower() in a.lower())
@@ -1329,6 +1330,11 @@ class SQLInFilter(SQLAlchemyBaseFilter, InFilter):
         return self.column.in_(values) if len(values) else False
 
 
+class SQLNotInFilter(SQLAlchemyBaseFilter, NotInFilter):
+    def expression(self, values):
+        return self.column.notin_(values) if len(values) else True
+    
+    
 class SQLContainsFilter(SQLAlchemyBaseFilter, ContainsFilter):
     def expression(self, value):
         return self.column.contains(value)

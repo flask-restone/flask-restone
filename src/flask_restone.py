@@ -11,7 +11,6 @@ from functools import partial, wraps
 from importlib import import_module
 from operator import attrgetter, itemgetter
 from types import MethodType
-from uuid import uuid4
 
 import exrex
 from aniso8601 import parse_date, parse_datetime
@@ -29,7 +28,7 @@ from sqlalchemy.orm import aliased, class_mapper
 from sqlalchemy.orm.attributes import ScalarObjectAttributeImpl
 from sqlalchemy.orm.collections import InstrumentedList
 from sqlalchemy.orm.exc import NoResultFound
-from werkzeug.exceptions import Forbidden, HTTPException
+from werkzeug.exceptions import HTTPException
 from werkzeug.http import HTTP_STATUS_CODES
 from werkzeug.urls import url_parse
 from werkzeug.utils import cached_property
@@ -191,6 +190,9 @@ class InvalidFilter(RestoneException):
     status_code = 400
 
 
+class Forbidden(RestoneException):
+    status_code = 403
+    
 # JSON Schema，也称为JSON模式。JSON Schema是描述你的JSON数据格式；
 # 主要有以下作用：
 # 对现有的json数据格式进行描述（字段类型、内容长度、是否必须存在、取值示例等）；

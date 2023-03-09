@@ -1383,18 +1383,18 @@ class SQLDateBetweenFilter(SQLAlchemyBaseFilter, DateBetweenFilter):
 
 FIELD_FILTERS_DICT = {
     Array: ("has",),
-    Boolean: ("eq", "ne", "in"),
-    Date: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in"),
-    DateString: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in"),
+    Boolean: ("eq", "ne", "in","ni"),
+    Date: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in","ni"),
+    DateString: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in","ni"),
     DateTime: ("eq", "ne", "lt", "lte", "gt", "gte", "bt"),
     DateTimeString: ("eq", "ne", "lt", "lte", "gt", "gte", "bt"),
-    Integer: ("eq", "ne", "lt", "lte", "gt", "gte", "in"),
-    ItemUri: ("eq", "ne", "in"),
-    Number: ("eq", "ne", "lt", "lte", "gt", "gte", "in"),
-    String: ("eq", "ne", "ct", "ict", "sw", "isw", "ew", "iew", "in"),
+    Integer: ("eq", "ne", "lt", "lte", "gt", "gte", "in","ni"),
+    ItemUri: ("eq", "ne", "in","ni"),
+    Number: ("eq", "ne", "lt", "lte", "gt", "gte", "in","ni"),
+    String: ("eq", "ne", "ct", "ict", "sw", "isw", "ew", "iew", "in","ni"),
     ToMany: ("has",),
-    ToOne: ("eq", "ne", "in"),
-    Uri: ("eq", "ne", "in"),
+    ToOne: ("eq", "ne", "in","ni"),
+    Uri: ("eq", "ne", "in","ni"),
 }
 
 

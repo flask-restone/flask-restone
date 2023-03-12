@@ -55,7 +55,7 @@ HTTP_VERBS_CN = {
     "update": "修改{}",
 }
 PERMISSION_DEFAULTS = (
-    ("read", "yes"),
+    ("read", "yes"), #
     ("create", "no"),
     ("update", "create"),
     ("delete", "update"),
@@ -192,7 +192,8 @@ class InvalidFilter(RestoneException):
 
 class Forbidden(RestoneException):
     status_code = 403
-    
+
+
 # JSON Schema，也称为JSON模式。JSON Schema是描述你的JSON数据格式；
 # 主要有以下作用：
 # 对现有的json数据格式进行描述（字段类型、内容长度、是否必须存在、取值示例等）；
@@ -382,30 +383,24 @@ class FieldSet(Schema, ResourceMixin):  # 字段集 规则和资源绑定
     ):  # 格式转换和检查
         result = dict(pre_resolved_properties) if pre_resolved_properties else {}
         if patchable:
-            object_ = self.patchable.convert(instance, update)  # 就是基类的转化校验
-        else:  # 区别在于语法
+            object_ = self.patchable.convert(instance, update)
+        else:
             object_ = super().convert(instance, update)
         for key, field in self.fields.items():
             if update and "u" not in field.io or (not update and "c" not in field.io):
-                continue  # 不可更新字段或不更新
-            if key in result:  # 已处理字段
                 continue
-            value = None
-            try:
-                value = object_[key]  # 转换校验后字典
-                value = field.convert(
-                    value,
-                )  # 字段本身的转换
-            except KeyError:  # 如果字典中没有当前的键
-                if patchable:
-                    continue
-                if field.default is not None:  # 有默认用默认
-                    value = field.default
-                elif field.nullable:  # 可为空设为None
-                    value = None
-                elif key not in self.required and (not strict):  # 键不再必须里且不严格
-                    value = None
-            result[field.attribute or key] = value  # 字段的显示名或键名
+            if key in result:
+                continue
+            value = object_.get(key)  # 通过get方法获取值
+            if value is not None:  # 如果值存在
+                value = field.convert(value)
+            elif field.default is not None:
+                value = field.default
+            elif field.nullable:
+                value = None
+            elif key not in self.required and not strict:
+                value = None
+            result[field.attribute or key] = value
         return result
 
     def parse_request(self, request):
@@ -635,15 +630,15 @@ class UUID(String):
     UUID_REGEX = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
     def __init__(self, **kwargs):
-        super().__init__(min_length=36, max_length=36, pattern=self.UUID_REGEX,**kwargs)
+        super().__init__(min_length=36, max_length=36, pattern=self.UUID_REGEX, **kwargs)
 
 
 class Path(String):
-    def __init__(self,level=1,**kwargs):
-        pattern = "/[\w]+"*level
-        super().__init__(pattern=pattern,**kwargs)
+    def __init__(self, level=1, **kwargs):
+        pattern = "/[\w]+" * level
+        super().__init__(pattern=pattern, **kwargs)
 
-       
+
 class Uri(String):
     def __init__(self, **kwargs):
         super().__init__(format="uri", **kwargs)
@@ -841,10 +836,36 @@ class Array(BaseField, ResourceMixin):
 
 
 class Object(BaseField, ResourceMixin):
+    """
+    在 JSON Schema 中，'patternProperties'是一个关键字，用于描述对象属性的模式。
+    它是一个用于限制 JSON 数据中对象属性模式的关键字，可以用来描述对象中所有匹配某个
+    正则表达式模式的属性的限制条件。
+    'patternProperties'关键字的值是一个对象，其中每个属性的名称是一个正则表达式模式，
+    用于匹配对象中的属性名；每个属性的值是一个 JSON Schema 对象，用于描述对象中对应属性的限制条件。
+    例如，以下 JSON Schema 用于描述一个具有两个属性的对象，其中属性名必须以大写字母'A'或'B'开头，属性值必须为整数：
+    
+    {
+      "type": "object",
+      "patternProperties": {
+        "^A": {
+          "type": "integer"
+        },
+        "^B": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    }
+    
+    在这个例子中，'patternProperties'的值是一个对象，其中包含两个属性，分别是以'A'和'B'开头的属性名的正则表达式模式。
+    每个属性的值是一个 JSON Schema 对象，用于描述属性的限制条件。
+    该 JSON Schema 还使用了'additionalProperties'关键字，用于禁止出现除了以'A'和'B'开头的属性名以外的其他属性。
+    使用'patternProperties'关键字可以使 JSON Schema 更加灵活，可以描述更加复杂的数据结构。
+    """
     def __init__(
         self,
         properties=None,
-        pattern=None,
+        pattern=None, # 正则表达式
         pattern_props=None,
         other_props=None,
         **kwargs,
@@ -952,6 +973,32 @@ class Object(BaseField, ResourceMixin):
 
 
 class AttributeMapped(Object):
+    """
+    def test_attribute_mapped(self):
+        o = fields.AttributeMapped(fields.Object({
+            "foo": fields.Integer()
+        }), mapping_attribute="key", pattern="[A-Z][0-9]+")
+
+        self.assertEqual([{'foo': 1, 'key': 'A3'}, {'foo': 1, 'key': 'B12'}],
+                         sorted(o.convert({"A3": {"foo": 1}, "B12": {"foo": 1}}), key=itemgetter("key")))
+
+        self.assertEqual({"A3": {"foo": 1}, "B12": {"foo": 2}},
+                         o.format([{'foo': 1, 'key': 'A3'}, {'foo': 2, 'key': 'B12'}]))
+
+        self.assertEqual({
+                             "type": "object",
+                             "additionalProperties": False,
+                             "patternProperties": {
+                                 "[A-Z][0-9]+": {
+                                    "additionalProperties": False,
+                                     "properties": {
+                                         "foo": {"type": "integer"}
+                                     },
+                                     "type": "object"
+                                 }
+                             }
+                         }, o.response)
+    """
     def __init__(self, schema_cls_or_obj, mapping_attribute=None, **kwargs):
         self.mapping_attribute = mapping_attribute
         super().__init__(schema_cls_or_obj, **kwargs)
@@ -974,15 +1021,7 @@ class AttributeMapped(Object):
     def converter(self, value):
         if self.pattern_props:
             field = next(iter(self.pattern_props.values()))
-            return [
-                self._set_mapping_attribute(
-                    field.convert(
-                        v,
-                    ),
-                    k,
-                )
-                for (k, v) in value.items()
-            ]
+            return [self._set_mapping_attribute(field.convert(v),k,)for (k, v) in value.items()]
         if self.other_props:
             return [self._set_mapping_attribute(self.other_props.convert(v), k) for (k, v) in value.items()]
         return {}
@@ -1011,18 +1050,15 @@ class ResourceReference:
             return binding
         if inspect.isclass(name) and issubclass(name, ModelResource):
             return name  # 资源类
-        restone = None
-        if binding and binding.api:
-            restone = binding.api
-        if restone:
-            if name in restone.resources:  # 资源名
-                return restone.resources[name]
+        if binding and binding.api and name in binding.api.resources:
+            return binding.api.resources[name]
+        
         try:
             if isinstance(name, str):  # 其他地方的资源名
                 (module_name, class_name) = name.rsplit(".", 1)
                 module = import_module(module_name)
                 return getattr(module, class_name)
-        except ValueError:
+        except (ValueError, ModuleNotFoundError):
             pass
         if binding and binding.api:
             raise RuntimeError(f'Resource named "{name}" is not registered with the Api it is bound to.')
@@ -1218,7 +1254,7 @@ class BaseFilter(Schema):
     def field(self):  # 被过滤的字段,只是使用field.convert
         if self.name in ("eq", "ne"):
             return self._field
-        if self.name in ("in","ni"):
+        if self.name in ("in", "ni"):
             return Array(self._field, min_items=0, unique=True)
         if self.name == "has":
             return self._field.container
@@ -1277,7 +1313,7 @@ NotEqualFilter = filter_factory("ne", lambda a, b: a != b)
 LessThanEqualFilter = filter_factory("lte", lambda a, b: a <= b)
 GreaterThanEqualFilter = filter_factory("gte", lambda a, b: a >= b)
 InFilter = filter_factory("in", lambda a, b: a in b)
-NotInFilter = filter_factory('ni',lambda a, b: not a in b)
+NotInFilter = filter_factory("ni", lambda a, b: not a in b)
 ContainsFilter = filter_factory("has", lambda a, b: hasattr(a, "__iter__") and b in a)
 StringContainsFilter = filter_factory("ct", lambda a, b: a and b in a)
 StringIContainsFilter = filter_factory("ict", lambda a, b: a and b.lower() in a.lower())
@@ -1285,7 +1321,7 @@ StartsWithFilter = filter_factory("sw", lambda a, b: a.startswith(b))
 IStartsWithFilter = filter_factory("isw", lambda a, b: a.lower().startswith(b.lower()))
 EndsWithFilter = filter_factory("ew", lambda a, b: a.endswith(b))
 IEndsWithFilter = filter_factory("iew", lambda a, b: a.lower().endswith(b.lower()))
-DateBetweenFilter = filter_factory("bt", lambda a, b: b[0] <= a <= [1])
+DateBetweenFilter = filter_factory("bt", lambda a, b: b[0] <= a <= b[1])
 
 
 class SQLAlchemyBaseFilter(BaseFilter):
@@ -1302,11 +1338,11 @@ class SQLAlchemyBaseFilter(BaseFilter):
             return query.filter(expressions[0])
         return query.filter(and_(*expressions))
 
-
+    
 class SQLEqualFilter(SQLAlchemyBaseFilter, EqualFilter):
     def expression(self, value):
         return self.column == value
-        
+
 
 class SQLNotEqualFilter(SQLAlchemyBaseFilter, NotEqualFilter):
     def expression(self, value):
@@ -1341,8 +1377,8 @@ class SQLInFilter(SQLAlchemyBaseFilter, InFilter):
 class SQLNotInFilter(SQLAlchemyBaseFilter, NotInFilter):
     def expression(self, values):
         return self.column.notin_(values) if len(values) else True
-    
-    
+
+
 class SQLContainsFilter(SQLAlchemyBaseFilter, ContainsFilter):
     def expression(self, value):
         return self.column.contains(value)
@@ -1385,18 +1421,18 @@ class SQLDateBetweenFilter(SQLAlchemyBaseFilter, DateBetweenFilter):
 
 FIELD_FILTERS_DICT = {
     Array: ("has",),
-    Boolean: ("eq", "ne", "in","ni"),
-    Date: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in","ni"),
-    DateString: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in","ni"),
+    Boolean: ("eq", "ne", "in", "ni"),
+    Date: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in", "ni"),
+    DateString: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in", "ni"),
     DateTime: ("eq", "ne", "lt", "lte", "gt", "gte", "bt"),
     DateTimeString: ("eq", "ne", "lt", "lte", "gt", "gte", "bt"),
-    Integer: ("eq", "ne", "lt", "lte", "gt", "gte", "in","ni"),
-    ItemUri: ("eq", "ne", "in","ni"),
-    Number: ("eq", "ne", "lt", "lte", "gt", "gte", "in","ni"),
-    String: ("eq", "ne", "ct", "ict", "sw", "isw", "ew", "iew", "in","ni"),
+    Integer: ("eq", "ne", "lt", "lte", "gt", "gte", "in", "ni"),
+    ItemUri: ("eq", "ne", "in", "ni"),
+    Number: ("eq", "ne", "lt", "lte", "gt", "gte", "in", "ni"),
+    String: ("eq", "ne", "ct", "ict", "sw", "isw", "ew", "iew", "in", "ni"),
     ToMany: ("has",),
-    ToOne: ("eq", "ne", "in","ni"),
-    Uri: ("eq", "ne", "in","ni"),
+    ToOne: ("eq", "ne", "in", "ni"),
+    Uri: ("eq", "ne", "in", "ni"),
 }
 
 
@@ -1530,8 +1566,6 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
 
     def faker(self):
         result = [self.resource.schema.faker() for i in range(2)]
-        # if self.item_decorator is not None:
-        #     result = [self.item_decorator(item) for item in result]
         if self.required_fields is None:
             return result
         return self._filter_required(result)
@@ -1790,9 +1824,7 @@ def route_from(url, method=None):
     else:
         url_adapter = appctx.url_adapter
         if url_adapter is None:
-            raise RuntimeError(
-                "Application was not able to create a URL adapter for request independent URL matching. You might be able to fix this by setting the SERVER_NAME config variable."
-            )
+            raise RuntimeError("Application was not able to create a URL adapter for request independent URL matching. You might be able to fix this by setting the SERVER_NAME config variable.")
     parsed_url = url_parse(url)
     if parsed_url.netloc not in ("", url_adapter.server_name):
         raise PageNotFound()
@@ -2242,7 +2274,7 @@ class ModelResourceMeta(ResourceMeta):
 
 class ModelResource(Resource, metaclass=ModelResourceMeta):
     manager = None
-    
+
     @Route.GET("", rel="instances")
     def instances(self, **kwargs):
         return self.manager.paginated_instances(**kwargs)
@@ -2293,12 +2325,11 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
     def destroy(self, id):
         self.manager.delete_by_id(id)
         return None, 204
-    
+
     @classmethod
     def faker(cls):
-        return {k:f.faker() for k,f in cls.schema.fields.items()}
-    
-    
+        return {k: f.faker() for k, f in cls.schema.fields.items()}
+
     class Schema:  # 设置各个字段的语法用的
         pass
 
@@ -2400,8 +2431,7 @@ class Manager:
             filters_name_dict=self.base_filter.named_filters(),
         )
         self.filters = {
-            field_name: {name: self._init_filter(filter, name, fields[field_name], field_name) for (name, filter) in field_filters.items()}
-            for (field_name, field_filters) in field_filters.items()
+            field_name: {name: self._init_filter(filter, name, fields[field_name], field_name) for (name, filter) in field_filters.items()} for (field_name, field_filters) in field_filters.items()
         }
         # print(self.filters.keys())
 
@@ -2932,7 +2962,7 @@ class HybridNeed:  # 混合需求
     def __call__(self, item):
         raise NotImplementedError()
 
-    def __hash__(self): # 需要可以放到 set 里
+    def __hash__(self):  # 需要可以放到 set 里
         return hash(self.__repr__())
 
     def identity_get_item_needs(self):
@@ -3204,19 +3234,19 @@ class PrincipalMixin:  # 鉴权插件
 
         return target_manager._query_get_all(query)
 
-    def create(self, properties, commit=True,force=False):
+    def create(self, properties, commit=True, force=False):
         if force or self._permissions["create"].can(properties):
             return super().create(properties, commit)
         raise Forbidden()
 
-    def update(self, item, changes,commit=True, force=False):
+    def update(self, item, changes, commit=True, force=False):
         if force or self._permissions["update"].can(item):
             return super().update(item, changes, commit)
         raise Forbidden()
 
-    def delete(self, item,commit=True, force=False):
+    def delete(self, item, commit=True, force=False):
         if force or self._permissions["delete"].can(item):
-            return super().delete(item,commit)
+            return super().delete(item, commit)
         raise Forbidden()
 
 

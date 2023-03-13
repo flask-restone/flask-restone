@@ -2350,6 +2350,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
             "update": "create",
             "delete": "update",
         }
+        fuzzy_fields = ()
         postgres_text_search_fields = ()
         postgres_full_text_index = None
         cache = False  # 缓存
@@ -2412,10 +2413,16 @@ class Manager:
                 target = self.resource.schema.fields[k].target
                 condition = self.convert_filters(value, target.manager.filters[v])
                 expression = target.manager._expression_for_condition(condition)
-                yield self._expression_for_join(k, expression)  # 返回表达式
+                yield self._expression_for_join(k, expression) # 返回表达式
+            elif name == '$like':
+                or_expressions = []
+                for field_name in self.resource.meta.get("fuzzy_fields",()):
+                    condition = self.convert_filters({'$ict': value["$eq"]},self.filters[field_name])
+                    or_expressions.append(self._expression_for_condition(condition))
+                yield self._or_expression(or_expressions)
             else:
                 try:
-                    yield self.convert_filters(value, self.filters[name])  # Condition条件实力
+                    yield self.convert_filters(value, self.filters[name]) # Condition条件实力
                 except KeyError:
                     raise InvalidFilter(f"Filter <{name}> is not allowed")
 
@@ -2623,17 +2630,13 @@ class RelationalManager(Manager):
         if where:
             where = tuple(self._convert_filters(where))  # fix
             expressions = [self._expression_for_condition(condition) if isinstance(condition, Condition) else condition for condition in where]
-            # print("expre", self._and_expression(expressions))
-            # print("1",query)
             query = self._query_filter(query, self._and_expression(expressions))
-            # print("2", query)
+
         sort = tuple(self._convert_sort(sort))
         query = self._query_order_by(query, sort)
-        # print("sort:::", query, type(query))
+
         if options:
-            query = query.with_entities(*options)  # ???@@@@
-            # print("query:::", query, type(query))
-            # print(query, type(query))
+            query = query.with_entities(*options)
         return query
 
     @cached_property

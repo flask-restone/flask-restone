@@ -13,7 +13,6 @@ from operator import attrgetter, itemgetter
 from types import MethodType
 
 import exrex
-from aniso8601 import parse_date, parse_datetime
 from flasgger import swag_from
 from flask import _app_ctx_stack, _request_ctx_stack
 from flask import current_app, g, json, jsonify, make_response, request
@@ -268,7 +267,7 @@ class Schema:
         data, code, headers = unpack(response)
         return self.format(data), code, headers
 
-
+    
 class ResourceMixin:
     """
     资源绑定插件
@@ -687,7 +686,7 @@ class DateString(BaseField):
         return value.strftime("%Y-%m-%d")
 
     def converter(self, value):
-        return parse_date(value)
+        return datetime.datetime.fromisoformat(value).date() #todo 3.7+
 
     def faker(self):
         return _faker.date()
@@ -703,7 +702,7 @@ class DateTimeString(BaseField):
         return value.isoformat()
 
     def converter(self, value):
-        return parse_datetime(value)
+        return datetime.datetime.fromisoformat(value)
 
     def faker(self):
         date = _faker.date_time()
@@ -737,7 +736,7 @@ class Integer(BaseField):
 
     def faker(self):
         minimum = self.response.get("minimum", 1)
-        maximum = self.response.get("maximum", 1000)
+        maximum = self.response.get("maximum", 100)
         return random.randint(minimum, maximum)
 
 
@@ -778,7 +777,7 @@ class Number(BaseField):
         exclusiveMaximum = self.response.get("exclusiveMaximum", False)
         if exclusiveMaximum:
             maximum -= 0.01
-        return random.uniform(minimum, maximum)
+        return random.randint(minimum*100, maximum*100)/100
 
 
 def _field_from_object(parent, schema_cls_or_obj):  # 从对象获取字段
@@ -1125,7 +1124,12 @@ class ToOne(BaseField, ResourceMixin):
 
 
 class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新 todo 设置可更新
-    """内联对象就是将一个资源完整嵌入"""
+    """内联对象就是将一个资源完整嵌入
+    
+    JSON Schema 可以使用 $ref 关键字来表示递归的数据结构。
+    $ref 关键字用于引用另一个位置的 JSON Schema，
+    这样可以在同一个 Schema 中多次使用同一个定义，或者在不同的 Schema 中使用相同的定义。
+    """
 
     def __init__(self, resource, patchable=True, **kwargs):
         self.target_reference = ResourceReference(resource)
@@ -1212,9 +1216,7 @@ class ItemUri(BaseField):
 
     def converter(self, value):
         _, args = route_from(value, "GET")
-        return self.target.manager.id_field.convert(
-            args["id"],
-        )
+        return self.target.manager.id_field.convert(args["id"])
 
     def faker(self):
         return f"{self.target.route_prefix}/{self.target.manager.id_field.faker()}"
@@ -1238,8 +1240,7 @@ class FilterMeta(type):
         if "op" in members:
             func = members["op"]
             members["op"] = classmethod(lambda s, a, b: func(a, b))
-        class_ = super(FilterMeta, mcs).__new__(mcs, name, bases, members)
-        return class_
+        return super(FilterMeta, mcs).__new__(mcs, name, bases, members)
 
 
 class BaseFilter(Schema):
@@ -2071,6 +2072,7 @@ class ItemRoute(Route):  # 单个记录
         return view
 
 
+
 class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
     def __init__(self, schema_cls_or_obj, io=None, attribute=None, description=None):
         self.field = _field_from_object(ItemAttributeRoute, schema_cls_or_obj)
@@ -2124,6 +2126,7 @@ class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
                 rel=camel_case(f"update_{route.attribute}"),
                 description=self.description,
             )
+
 
 
 def _make_response(data, code, headers=None):
@@ -2440,7 +2443,6 @@ class Manager:
         self.filters = {
             field_name: {name: self._init_filter(filter, name, fields[field_name], field_name) for (name, filter) in field_filters.items()} for (field_name, field_filters) in field_filters.items()
         }
-        # print(self.filters.keys())
 
     # 字段集和对应的过滤器表达式得到的过滤器字典
     @staticmethod
@@ -2702,7 +2704,7 @@ class SQLAlchemyManager(RelationalManager):
         read_only_fields = meta.get("read_only_fields", ())
         write_only_fields = meta.get("write_only_fields", ())
         pre_declared_fields = {f.attribute or k for k, f in fs.fields.items()}
-
+        # note this is the magic
         for name, column in mapper.columns.items():
             if (include_fields and name in include_fields) or (exclude_fields and name not in exclude_fields) or not (include_fields or exclude_fields):
                 if column.primary_key or column.foreign_keys:
@@ -2792,13 +2794,19 @@ class SQLAlchemyManager(RelationalManager):
     def _query_filter(self, query, expression):
         return query.filter(expression)
 
-    #  _expression_for_join('service',)
     def _expression_for_join(self, attribute, expression):
         relationship = getattr(self.model, attribute)
         if isinstance(relationship.impl, ScalarObjectAttributeImpl):
             return relationship.has(expression)
         return relationship.any(expression)
 
+    # def _expression_for_join(self, attribute, expression):
+    #     relationship = getattr(self.model, attribute)
+    #     if not (hasattr(relationship.comparator, 'any') and hasattr(
+    #             relationship.comparator, 'has')):
+    #         return relationship.has(expression)
+    #     return relationship.any(expression)
+    
     def _expression_for_condition(self, condition):
         return condition.filter.expression(condition.value)
 

@@ -46,13 +46,7 @@ HTTP_VERBS = {
     "PATCH": "update",
     "DELETE": "destroy",
 }
-HTTP_VERBS_CN = {
-    "create": "创建{}",
-    "destroy": "删除{}",
-    "instances": "查询{}列表",
-    "self": "查询{}详情",
-    "update": "修改{}",
-}
+
 PERMISSION_DEFAULTS = (
     ("read", "yes"), #
     ("create", "no"),
@@ -70,17 +64,17 @@ PERMISSION_DENIED_STRINGS = ("no", "nobody", "none")
 PERMISSION_GRANTED_STRINGS = ("yes", "everybody", "anybody", "everyone", "anyone")
 
 # ---------------------------信号量--------------------
-signals = Namespace()
-before_create = signals.signal("before-create")
-after_create = signals.signal("after-create")
-before_update = signals.signal("before-update")
-after_update = signals.signal("after-update")
-before_delete = signals.signal("before-delete")
-after_delete = signals.signal("after-delete")
-before_add_to_relation = signals.signal("before-add-to-relation")
-after_add_to_relation = signals.signal("after-add-to-relation")
-before_remove_from_relation = signals.signal("before-remove-from-relation")
-after_remove_from_relation = signals.signal("after-remove-from-relation")
+_signals = Namespace()
+before_create = _signals.signal("before-create")
+after_create = _signals.signal("after-create")
+before_update = _signals.signal("before-update")
+after_update = _signals.signal("after-update")
+before_delete = _signals.signal("before-delete")
+after_delete = _signals.signal("after-delete")
+before_add_to_relation = _signals.signal("before-add-to-relation")
+after_add_to_relation = _signals.signal("after-add-to-relation")
+before_remove_from_relation = _signals.signal("before-remove-from-relation")
+after_remove_from_relation = _signals.signal("after-remove-from-relation")
 
 
 # ---------------------------异常----------------------
@@ -580,6 +574,7 @@ class Custom(BaseField):  # 自定义字段
         if self._converter is None:
             return value
         return self._converter(value)
+
 
 
 class String(BaseField):
@@ -1500,7 +1495,6 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
     @cached_property
     def _sort_fields(self):
         return self.resource.manager._sort_fields
-        # {name: field for (name, field) in self.resource.schema.readable_fields.items() if name in self._filters and self.resource.manager._is_sortable_field(field)}
 
     @cached_property
     def _filter_schema(self):
@@ -1837,9 +1831,7 @@ def unpack(value):
         return value, 200, {}
     if len(value) == 2:
         return value[0], value[1], {}
-    if len(value) == 3:
-        return value
-    return value, 200, {}
+    return value
 
 
 def get_value(key, obj, default=None):
@@ -1848,13 +1840,6 @@ def get_value(key, obj, default=None):
             return obj[key]
         except (IndexError, TypeError, KeyError):
             pass
-    # ...联合查询
-    # if "." in key:
-    #     keys = key.split(".")
-    #     for k in keys:
-    #         obj = get_value(k, obj)
-    #     return obj
-
     return getattr(obj, key, default)
 
 
@@ -1957,7 +1942,7 @@ class Route:
         if response_schema:
             schema["targetSchema"] = response_schema.response  # 响应格式的响应部分
         return schema
-
+        
     def for_method(
         self,
         method,
@@ -2178,7 +2163,6 @@ class ResourceMeta(type):
             if model and datetime_field_class:
                 for k, field in model.__dict__.items():
                     if not k.startswith("__") and hasattr(field, "type"):
-                        print(field, field.info)
                         if str(field.type) == "DATETIME":
                             schema[k] = datetime_field_class(io="r", description=field.info)
 
@@ -2205,16 +2189,6 @@ class ResourceMeta(type):
             for name in meta.get("write_only_fields", ()):
                 if name in fs.fields:
                     fs.fields[name].io = "w"
-            # 如果没有description默认使用同名的model里的info
-            # for k,f in fs.fields.items():
-            #     if not f.description:
-            #         model_field = getattr(model,k,None)
-            #
-            #         # print(model_field.info)
-            #         if model_field and model_field.info:
-            #             f.description = model_field.info
-            # print(model_field.info)
-
             fs.bind(class_)
         for n, m in members.items():
             if isinstance(m, Route):
@@ -3272,6 +3246,7 @@ def principals(manager):
 
 
 def schema_to_swag_dict(schema, tags=None):
+    print(schema)
     rel = schema.get("rel")
     if rel in ("self", "destroy") or rel.startswith("read"):
         parameters = [
@@ -3311,6 +3286,13 @@ def schema_to_swag_dict(schema, tags=None):
 
 
 def schema_to_doc_dict(schema, route, tags=None, resource=None):
+    HTTP_VERBS_CN = {
+        "create"   : "创建{}",
+        "destroy"  : "删除{}",
+        "instances": "查询{}列表",
+        "self"     : "查询{}详情",
+        "update"   : "修改{}",
+    }
     request_json = []
     request_args = []
     response_args = []
@@ -3456,6 +3438,14 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
         settings.setdefault("indent", 4)
         settings.setdefault("sort_keys", True)
         response_json = json.dumps(data, **settings)
+        def _sort_key(x):
+            if "time" in x["name"]:
+                return 10, x["name"]
+            if "_" in x["name"]:
+                return 9, x["name"]
+            if "$" in x["name"]:
+                return 0, x["name"]
+            return 1, x["name"]
         response_args.sort(key=_sort_key)
 
     rel_cn = HTTP_VERBS_CN.get(rel, None)
@@ -3478,14 +3468,7 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
     return dct
 
 
-def _sort_key(x):
-    if "time" in x["name"]:
-        return 10, x["name"]
-    if "_" in x["name"]:
-        return 9, x["name"]
-    if "$" in x["name"]:
-        return 0, x["name"]
-    return 1, x["name"]
+
 
 
 class Api:
@@ -3513,20 +3496,6 @@ class Api:
             self.init_app(app)
 
     def init_app(self, app):
-        try:
-            app.record(self._deferred_blueprint_init)
-        except AttributeError:
-            self._init_app(app)
-        else:
-            self.blueprint = app
-
-    def _deferred_blueprint_init(self, setup_state):
-        self.prefix = "".join((setup_state.url_prefix or "", self.prefix))
-        for resource in self.resources.values():
-            resource.route_prefix = "".join((self.prefix, "/", resource.meta.name))
-        self._init_app(setup_state.app)
-
-    def _init_app(self, app):
         app.config.setdefault("RESTONE_MAX_PER_PAGE", 100)
         app.config.setdefault("RESTONE_DEFAULT_PER_PAGE", 20)
         app.config.setdefault("RESTONE_DEFAULT_PARSE_STYLE", "json")
@@ -3565,7 +3534,6 @@ class Api:
             if schema["rel"] != "describedBy":
                 swag_from(schema_to_swag_dict(schema, tags))(view_func)
                 dct = schema_to_doc_dict(schema, route, tags, resource)
-                print(resource.meta.title, dct)
                 self.api_doc_list.append(dct)
 
     def _register_view(self, app, rule, view_func, endpoint, methods, relation):

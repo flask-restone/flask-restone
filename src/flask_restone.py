@@ -7,12 +7,15 @@ import inspect
 import random
 import re
 from collections import OrderedDict
+from dataclasses import dataclass
 from functools import partial, wraps
 from importlib import import_module
 from operator import attrgetter, itemgetter
 from types import MethodType
 
 import exrex
+from docxtpl import DocxTemplate
+from faker import Faker
 from flasgger import swag_from
 from flask import _app_ctx_stack, _request_ctx_stack
 from flask import current_app, g, json, jsonify, make_response, request
@@ -33,8 +36,37 @@ from werkzeug.urls import url_parse
 from werkzeug.utils import cached_property
 from werkzeug.wrappers import Response
 
-from faker import Faker
-from docxtpl import DocxTemplate
+__all__ = [
+    "fields",
+    "ModelResource",
+    "Route",
+    "Api",
+    "ItemRoute",
+    "ItemAttributeRoute",
+    "principals",
+    "SQLAlchemyManager",
+    "RestoneException",
+    "ItemNotFound",
+    "RequestMustBeJSON",
+    "RestoneValidationError",
+    "DuplicateKey",
+    "BackendConflict",
+    "PageNotFound",
+    "InvalidJSON",
+    "InvalidFilter",
+    "Forbidden",
+    "before_create",
+    "after_create",
+    "before_update",
+    "after_update",
+    "before_delete",
+    "after_delete",
+    "before_add_to_relation",
+    "after_add_to_relation",
+    "before_remove_from_relation",
+    "after_remove_from_relation",
+    "Pagination",
+]
 
 _faker = Faker()
 # ---------------------------HTTP常量--------------------
@@ -46,22 +78,6 @@ HTTP_VERBS = {
     "PATCH": "update",
     "DELETE": "destroy",
 }
-
-PERMISSION_DEFAULTS = (
-    ("read", "yes"), #
-    ("create", "no"),
-    ("update", "create"),
-    ("delete", "update"),
-)
-DEFAULT_METHODS = ("read", "create", "update", "delete")
-METHOD_ROUTE_RELATIONS = (
-    ("read", ("read", "instances")),
-    ("create", ("create",)),
-    ("update", ("update",)),
-    ("delete", ("destroy",)),
-)
-PERMISSION_DENIED_STRINGS = ("no", "nobody", "none")
-PERMISSION_GRANTED_STRINGS = ("yes", "everybody", "anybody", "everyone", "anyone")
 
 # ---------------------------信号量--------------------
 _signals = Namespace()
@@ -261,7 +277,7 @@ class Schema:
         data, code, headers = unpack(response)
         return self.format(data), code, headers
 
-    
+
 class ResourceMixin:
     """
     资源绑定插件
@@ -576,7 +592,6 @@ class Custom(BaseField):  # 自定义字段
         return self._converter(value)
 
 
-
 class String(BaseField):
     url_rule_converter = "string"
 
@@ -681,7 +696,7 @@ class DateString(BaseField):
         return value.strftime("%Y-%m-%d")
 
     def converter(self, value):
-        return datetime.datetime.fromisoformat(value).date() #todo 3.7+
+        return datetime.datetime.fromisoformat(value).date()  # todo 3.7+
 
     def faker(self):
         return _faker.date()
@@ -772,7 +787,7 @@ class Number(BaseField):
         exclusiveMaximum = self.response.get("exclusiveMaximum", False)
         if exclusiveMaximum:
             maximum -= 0.01
-        return random.randint(minimum*100, maximum*100)/100
+        return random.randint(minimum * 100, maximum * 100) / 100
 
 
 def _field_from_object(parent, schema_cls_or_obj):  # 从对象获取字段
@@ -837,7 +852,7 @@ class Object(BaseField, ResourceMixin):
     'patternProperties'关键字的值是一个对象，其中每个属性的名称是一个正则表达式模式，
     用于匹配对象中的属性名；每个属性的值是一个 JSON Schema 对象，用于描述对象中对应属性的限制条件。
     例如，以下 JSON Schema 用于描述一个具有两个属性的对象，其中属性名必须以大写字母'A'或'B'开头，属性值必须为整数：
-    
+
     {
       "type": "object",
       "patternProperties": {
@@ -850,16 +865,17 @@ class Object(BaseField, ResourceMixin):
       },
       "additionalProperties": false
     }
-    
+
     在这个例子中，'patternProperties'的值是一个对象，其中包含两个属性，分别是以'A'和'B'开头的属性名的正则表达式模式。
     每个属性的值是一个 JSON Schema 对象，用于描述属性的限制条件。
     该 JSON Schema 还使用了'additionalProperties'关键字，用于禁止出现除了以'A'和'B'开头的属性名以外的其他属性。
     使用'patternProperties'关键字可以使 JSON Schema 更加灵活，可以描述更加复杂的数据结构。
     """
+
     def __init__(
         self,
         properties=None,
-        pattern=None, # 正则表达式
+        pattern=None,  # 正则表达式
         pattern_props=None,
         other_props=None,
         **kwargs,
@@ -993,6 +1009,7 @@ class AttributeMapped(Object):
                              }
                          }, o.response)
     """
+
     def __init__(self, schema_cls_or_obj, mapping_attribute=None, **kwargs):
         self.mapping_attribute = mapping_attribute
         super().__init__(schema_cls_or_obj, **kwargs)
@@ -1015,7 +1032,13 @@ class AttributeMapped(Object):
     def converter(self, value):
         if self.pattern_props:
             field = next(iter(self.pattern_props.values()))
-            return [self._set_mapping_attribute(field.convert(v),k,)for (k, v) in value.items()]
+            return [
+                self._set_mapping_attribute(
+                    field.convert(v),
+                    k,
+                )
+                for (k, v) in value.items()
+            ]
         if self.other_props:
             return [self._set_mapping_attribute(self.other_props.convert(v), k) for (k, v) in value.items()]
         return {}
@@ -1046,7 +1069,7 @@ class ResourceReference:
             return name  # 资源类
         if binding and binding.api and name in binding.api.resources:
             return binding.api.resources[name]
-        
+
         try:
             if isinstance(name, str):  # 其他地方的资源名
                 (module_name, class_name) = name.rsplit(".", 1)
@@ -1120,7 +1143,7 @@ class ToOne(BaseField, ResourceMixin):
 
 class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新 todo 设置可更新
     """内联对象就是将一个资源完整嵌入
-    
+
     JSON Schema 可以使用 $ref 关键字来表示递归的数据结构。
     $ref 关键字用于引用另一个位置的 JSON Schema，
     这样可以在同一个 Schema 中多次使用同一个定义，或者在不同的 Schema 中使用相同的定义。
@@ -1334,7 +1357,7 @@ class SQLAlchemyBaseFilter(BaseFilter):
             return query.filter(expressions[0])
         return query.filter(and_(*expressions))
 
-    
+
 class SQLEqualFilter(SQLAlchemyBaseFilter, EqualFilter):
     def expression(self, value):
         return self.column == value
@@ -1942,7 +1965,7 @@ class Route:
         if response_schema:
             schema["targetSchema"] = response_schema.response  # 响应格式的响应部分
         return schema
-        
+
     def for_method(
         self,
         method,
@@ -2057,7 +2080,6 @@ class ItemRoute(Route):  # 单个记录
         return view
 
 
-
 class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
     def __init__(self, schema_cls_or_obj, io=None, attribute=None, description=None):
         self.field = _field_from_object(ItemAttributeRoute, schema_cls_or_obj)
@@ -2111,7 +2133,6 @@ class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
                 rel=camel_case(f"update_{route.attribute}"),
                 description=self.description,
             )
-
 
 
 def _make_response(data, code, headers=None):
@@ -2390,16 +2411,16 @@ class Manager:
                 target = self.resource.schema.fields[k].target
                 condition = self.convert_filters(value, target.manager.filters[v])
                 expression = target.manager._expression_for_condition(condition)
-                yield self._expression_for_join(k, expression) # 返回表达式
-            elif name == '$like':
+                yield self._expression_for_join(k, expression)  # 返回表达式
+            elif name == "$like":
                 or_expressions = []
-                for field_name in self.resource.meta.get("fuzzy_fields",()):
-                    condition = self.convert_filters({'$ict': value["$eq"]},self.filters[field_name])
+                for field_name in self.resource.meta.get("fuzzy_fields", ()):
+                    condition = self.convert_filters({"$ict": value["$eq"]}, self.filters[field_name])
                     or_expressions.append(self._expression_for_condition(condition))
                 yield self._or_expression(or_expressions)
             else:
                 try:
-                    yield self.convert_filters(value, self.filters[name]) # Condition条件实力
+                    yield self.convert_filters(value, self.filters[name])  # Condition条件实力
                 except KeyError:
                     raise InvalidFilter(f"Filter <{name}> is not allowed")
 
@@ -2780,7 +2801,7 @@ class SQLAlchemyManager(RelationalManager):
     #             relationship.comparator, 'has')):
     #         return relationship.has(expression)
     #     return relationship.any(expression)
-    
+
     def _expression_for_condition(self, condition):
         return condition.filter.expression(condition.value)
 
@@ -3073,9 +3094,18 @@ class HybridPermission(Permission):
 
 
 class PrincipalMixin:  # 鉴权插件
+    PERMISSION_GRANTED_STRINGS = ("yes", "everybody", "anybody", "everyone", "anyone")
+    PERMISSION_DENIED_STRINGS = ("no", "nobody", "none")
+    PERMISSION_DEFAULTS = (
+        ("read", "yes"),  #
+        ("create", "no"),
+        ("update", "create"),
+        ("delete", "update"),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        raw_needs = dict(PERMISSION_DEFAULTS)
+        raw_needs = dict(self.PERMISSION_DEFAULTS)
         raw_needs.update(self.resource.meta.get("permissions", {}))
         self._raw_needs = raw_needs  # 粗的权限字典
 
@@ -3093,9 +3123,9 @@ class PrincipalMixin:  # 鉴权插件
                 return needs
 
             for need in needs:
-                if need in PERMISSION_GRANTED_STRINGS:  # 全权
+                if need in self.PERMISSION_GRANTED_STRINGS:  # 全权
                     return {True}
-                if need in PERMISSION_DENIED_STRINGS:  # 无权
+                if need in self.PERMISSION_DENIED_STRINGS:  # 无权
                     options.add(Permission(("permission-denied",)))
                 elif need in methods:  # 如果权限也是 curd 词
                     if need in path:
@@ -3287,11 +3317,11 @@ def schema_to_swag_dict(schema, tags=None):
 
 def schema_to_doc_dict(schema, route, tags=None, resource=None):
     HTTP_VERBS_CN = {
-        "create"   : "创建{}",
-        "destroy"  : "删除{}",
+        "create": "创建{}",
+        "destroy": "删除{}",
         "instances": "查询{}列表",
-        "self"     : "查询{}详情",
-        "update"   : "修改{}",
+        "self": "查询{}详情",
+        "update": "修改{}",
     }
     request_json = []
     request_args = []
@@ -3438,6 +3468,7 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
         settings.setdefault("indent", 4)
         settings.setdefault("sort_keys", True)
         response_json = json.dumps(data, **settings)
+
         def _sort_key(x):
             if "time" in x["name"]:
                 return 10, x["name"]
@@ -3446,6 +3477,7 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
             if "$" in x["name"]:
                 return 0, x["name"]
             return 1, x["name"]
+
         response_args.sort(key=_sort_key)
 
     rel_cn = HTTP_VERBS_CN.get(rel, None)
@@ -3466,9 +3498,6 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
         "response_json": response_json,
     }
     return dct
-
-
-
 
 
 class Api:
@@ -3625,3 +3654,37 @@ class Api:
                 # if callable()
                 self.add_route(route, resource)  # ,decorator=_decorator)
         self.resources[resource.meta.name] = resource
+
+
+# 为了更方便的调用以及别名
+@dataclass
+class fields:
+    Raw = BaseField
+    Any = Any
+    String = String
+    UUID = UUID
+    Path = Path
+    Uri = Uri
+    Email = Email
+    Date = Date
+    DateTime = DateTime
+    DateString = DateString
+    DateTimeString = DateString
+    Boolean = Boolean
+    Integer = Integer
+    Number = Number
+    PositiveInteger = PositiveInteger
+    Array = Array
+    Object = Object
+    Inline = Inline
+    InlineModel = InlineModel
+    ToOne = ToOne
+    ToMany = ToMany
+    ItemType = ItemType
+    ItemUri = ItemUri
+    # alias
+    Int = Integer
+    Str = String
+    Bool = Boolean
+    List = Array
+    Dict = Object

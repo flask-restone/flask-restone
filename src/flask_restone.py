@@ -22,7 +22,7 @@ from flask import current_app, g, json, jsonify, make_response, request
 from flask.signals import Namespace
 from flask_principal import ItemNeed, Permission, RoleNeed, UserNeed
 from flask_sqlalchemy import Pagination as SAPagination
-from jsonschema import Draft4Validator, FormatChecker, ValidationError
+from jsonschema import ValidationError as _ValidationError, Draft4Validator, FormatChecker
 from sqlalchemy import String as String_, and_, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
@@ -38,6 +38,7 @@ from werkzeug.wrappers import Response
 
 __all__ = [
     "fields",
+    "filters",
     "ModelResource",
     "Route",
     "Api",
@@ -48,7 +49,7 @@ __all__ = [
     "RestoneException",
     "ItemNotFound",
     "RequestMustBeJSON",
-    "RestoneValidationError",
+    "ValidationError",
     "DuplicateKey",
     "BackendConflict",
     "PageNotFound",
@@ -136,7 +137,7 @@ class RequestMustBeJSON(RestoneException):
     status_code = 415
 
 
-class RestoneValidationError(RestoneException):
+class ValidationError(RestoneException):
     status_code = 400
 
     def __init__(self, errors, root=None, schema_uri="#"):
@@ -262,9 +263,9 @@ class Schema:
         validator = self._update_validator if update else self._validator  # 运用update的语法检查实例
         try:
             validator.validate(instance)  # 没报错就返回实例
-        except ValidationError:
+        except _ValidationError:
             errors = validator.iter_errors(instance)  # 否则抛出验证错误
-            raise RestoneValidationError(errors)
+            raise ValidationError(errors)
         return instance
 
     def parse_request(self, request):  # 解析请求并校验
@@ -1275,11 +1276,11 @@ class BaseFilter(Schema):
             return self._field
         if self.name in ("in", "ni"):
             return Array(self._field, min_items=0, unique=True)
-        if self.name == "has":
+        if self.name == "ha":
             return self._field.container
         if self.name == "bt":
             return Array(self._field, min_items=2, max_items=2)
-        if self.name in ("ct", "ict", "sw", "isw", "ew", "iew"):
+        if self.name in ("ct", "ict", "sw", "si", "ew", "ei"):
             return String(min_length=1)
         if not isinstance(self._field, (Date, DateTime, DateString, DateTimeString)):
             return Number()
@@ -1329,20 +1330,38 @@ LessThanFilter = filter_factory("lt", lambda a, b: a < b)
 GreaterThanFilter = filter_factory("gt", lambda a, b: a > b)
 EqualFilter = filter_factory("eq", lambda a, b: a == b)
 NotEqualFilter = filter_factory("ne", lambda a, b: a != b)
-LessThanEqualFilter = filter_factory("lte", lambda a, b: a <= b)
-GreaterThanEqualFilter = filter_factory("gte", lambda a, b: a >= b)
+LessThanEqualFilter = filter_factory("le", lambda a, b: a <= b)
+GreaterThanEqualFilter = filter_factory("ge", lambda a, b: a >= b)
 InFilter = filter_factory("in", lambda a, b: a in b)
 NotInFilter = filter_factory("ni", lambda a, b: not a in b)
-ContainsFilter = filter_factory("has", lambda a, b: hasattr(a, "__iter__") and b in a)
+ContainsFilter = filter_factory("ha", lambda a, b: hasattr(a, "__iter__") and b in a)
 StringContainsFilter = filter_factory("ct", lambda a, b: a and b in a)
 StringIContainsFilter = filter_factory("ict", lambda a, b: a and b.lower() in a.lower())
 StartsWithFilter = filter_factory("sw", lambda a, b: a.startswith(b))
-IStartsWithFilter = filter_factory("isw", lambda a, b: a.lower().startswith(b.lower()))
+IStartsWithFilter = filter_factory("si", lambda a, b: a.lower().startswith(b.lower()))
 EndsWithFilter = filter_factory("ew", lambda a, b: a.endswith(b))
-IEndsWithFilter = filter_factory("iew", lambda a, b: a.lower().endswith(b.lower()))
+IEndsWithFilter = filter_factory("ei", lambda a, b: a.lower().endswith(b.lower()))
 DateBetweenFilter = filter_factory("bt", lambda a, b: b[0] <= a <= b[1])
 
-
+@dataclass
+class filters:                        # 过滤器的别名与代理
+    LT = LessThanFilter               #
+    GT = GreaterThanFilter            #
+    EQ = EqualFilter                  #
+    NE = NotEqualFilter               #
+    LE = LessThanEqualFilter          #
+    GE = GreaterThanEqualFilter       #
+    IN = InFilter                     #
+    NI = NotInFilter                  #
+    HA = ContainsFilter               #
+    CT = StringContainsFilter         #
+    CI = StringIContainsFilter        #
+    SW = StartsWithFilter             #
+    SI = IStartsWithFilter            #
+    EW = EndsWithFilter               #
+    EI = IEndsWithFilter              #
+    BT = DateBetweenFilter            #
+    
 class SQLAlchemyBaseFilter(BaseFilter):
     namespace = "sql"
 
@@ -1439,17 +1458,17 @@ class SQLDateBetweenFilter(SQLAlchemyBaseFilter, DateBetweenFilter):
 
 
 FIELD_FILTERS_DICT = {
-    Array: ("has",),
+    Array: ("ha",),
     Boolean: ("eq", "ne", "in", "ni"),
-    Date: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in", "ni"),
-    DateString: ("eq", "ne", "lt", "lte", "gt", "gte", "bt", "in", "ni"),
-    DateTime: ("eq", "ne", "lt", "lte", "gt", "gte", "bt"),
-    DateTimeString: ("eq", "ne", "lt", "lte", "gt", "gte", "bt"),
-    Integer: ("eq", "ne", "lt", "lte", "gt", "gte", "in", "ni"),
+    Date: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
+    DateString: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
+    DateTime: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
+    DateTimeString: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
+    Integer: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
     ItemUri: ("eq", "ne", "in", "ni"),
-    Number: ("eq", "ne", "lt", "lte", "gt", "gte", "in", "ni"),
-    String: ("eq", "ne", "ct", "ict", "sw", "isw", "ew", "iew", "in", "ni"),
-    ToMany: ("has",),
+    Number: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
+    String: ("eq", "ne", "ct", "ict", "sw", "si", "ew", "ei", "in", "ni"),
+    ToMany: ("ha",),
     ToOne: ("eq", "ne", "in", "ni"),
     Uri: ("eq", "ne", "in", "ni"),
 }
@@ -3658,7 +3677,7 @@ class Api:
 
 # 为了更方便的调用以及别名
 @dataclass
-class fields:
+class fields:  # noqa
     Raw = BaseField
     Any = Any
     String = String

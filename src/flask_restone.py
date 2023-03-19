@@ -1281,7 +1281,7 @@ class BaseFilter(Schema):
             return self._field.container
         if self.name == "bt":
             return Array(self._field, min_items=2, max_items=2)
-        if self.name in ("ct", "ict", "sw", "si", "ew", "ei"):
+        if self.name in ("ct", "ci", "sw", "si", "ew", "ei"):
             return String(min_length=1)
         if not isinstance(self._field, (Date, DateTime, DateString, DateTimeString)):
             return Number()
@@ -1337,7 +1337,7 @@ InFilter = filter_factory("in", lambda a, b: a in b)
 NotInFilter = filter_factory("ni", lambda a, b: not a in b)
 ContainsFilter = filter_factory("ha", lambda a, b: hasattr(a, "__iter__") and b in a)
 StringContainsFilter = filter_factory("ct", lambda a, b: a and b in a)
-StringIContainsFilter = filter_factory("ict", lambda a, b: a and b.lower() in a.lower())
+StringIContainsFilter = filter_factory("ci", lambda a, b: a and b.lower() in a.lower())
 StartsWithFilter = filter_factory("sw", lambda a, b: a.startswith(b))
 IStartsWithFilter = filter_factory("si", lambda a, b: a.lower().startswith(b.lower()))
 EndsWithFilter = filter_factory("ew", lambda a, b: a.endswith(b))
@@ -1469,7 +1469,7 @@ FIELD_FILTERS_DICT = {
     Integer: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
     ItemUri: ("eq", "ne", "in", "ni"),
     Number: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
-    String: ("eq", "ne", "ct", "ict", "sw", "si", "ew", "ei", "in", "ni"),
+    String: ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
     ToMany: ("ha",),
     ToOne: ("eq", "ne", "in", "ni"),
     Uri: ("eq", "ne", "in", "ni"),
@@ -1934,7 +1934,7 @@ class Route:
         self.format_response = format_response  # 是否格式化响应
         self.success_code = success_code  # 状态码
 
-        annotations = getattr(view_func, "__annotations__", None)  # 获取视图函数的标注
+        annotations = getattr(view_func, "__annotations__", None)  # 获取视图函数的注解
         if isinstance(annotations, dict) and annotations:
             self.request_schema = FieldSet({name: field for (name, field) in annotations.items() if name != "return"})  # 请求的语法就是参数名和参数字段类型的字段集，响应也有字段
             self.response_schema = annotations.get("return", response_schema)
@@ -3008,7 +3008,7 @@ class HybridItemNeed(HybridNeed):  # HyHridItemNeed("creat","user") 创建用户
                     yield need[1]
 
     def extend(self, field):
-        return HybridRelationshipNeed(self.method, field)
+        return HybridRelationNeed(self.method, field)
 
     def __call__(self, item):
         if self.method == "id":
@@ -3022,14 +3022,11 @@ class HybridItemNeed(HybridNeed):  # HyHridItemNeed("creat","user") 创建用户
     def __eq__(self, other):
         return isinstance(other, HybridItemNeed) and self.method == other.method and self.type == other.type and self.resource == other.resource
 
-    def __hash__(self):
-        return hash(self.__repr__())
-
     def __repr__(self):
         return f"<HybridItemNeed method='{self.method}' type='{self.type}'>"
 
 
-class HybridRelationshipNeed(HybridItemNeed):
+class HybridRelationNeed(HybridItemNeed):
     def __init__(self, method, *fields):
         super().__init__(method, fields[-1].resource, fields[-1].target.meta.name)
         self.fields = fields
@@ -3054,16 +3051,13 @@ class HybridRelationshipNeed(HybridItemNeed):
         return isinstance(other, HybridItemNeed) and self.method == other.method and self.resource == other.resource and self.fields == other.fields
 
     def extend(self, field):
-        return HybridRelationshipNeed(self.method, field, *self.fields)
-
-    def __hash__(self):
-        return hash((self.method, self.type, self.fields))
+        return HybridRelationNeed(self.method, field, *self.fields)
 
     def __repr__(self):
-        return f"<HybridRelationshipNeed method='{self.method}' type='{self.type}' {self.fields}>"
+        return f"<HybridRelationNeed method='{self.method}' type='{self.type}' {self.fields}>"
 
 
-class HybridUserNeed(HybridRelationshipNeed):
+class HybridUserNeed(HybridRelationNeed):
     def __init__(self, field):
         super().__init__("id", field)
 

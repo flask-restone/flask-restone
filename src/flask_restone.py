@@ -1241,6 +1241,7 @@ class ItemUri(BaseField):
         return f"{self.target.route_prefix}/{self.target.manager.id_field.faker()}"
 
 
+
 # -------------------过滤器-------------------------------------
 class Condition:  # 属性 过滤器 值
     def __init__(self, attribute, filter, value):
@@ -1922,7 +1923,6 @@ class Route:
         response_schema=None,
         format_response=True,
         success_code=None,
-        required_fields=None,
     ):
         self.rel = rel  # 关系
         self.rule = rule  # 规则
@@ -1933,7 +1933,7 @@ class Route:
         self.view_func = view_func  # 视图函数
         self.format_response = format_response  # 是否格式化响应
         self.success_code = success_code  # 状态码
-        self.required_fields = required_fields
+
         annotations = getattr(view_func, "__annotations__", None)  # 获取视图函数的标注
         if isinstance(annotations, dict) and annotations:
             self.request_schema = FieldSet({name: field for (name, field) in annotations.items() if name != "return"})  # 请求的语法就是参数名和参数字段类型的字段集，响应也有字段
@@ -1941,10 +1941,6 @@ class Route:
         else:  # 没有标注则要指定参数
             self.request_schema = schema
             self.response_schema = response_schema
-
-        # 新增属性属性过滤
-        if self.required_fields and isinstance(self.response_schema, Instances):
-            self.response_schema = Instances(self.required_fields)
 
         self._related_routes = ()  # 相关的路由
         for method in HTTP_METHODS:
@@ -1999,7 +1995,6 @@ class Route:
     ):
         attribute = kwargs.pop("attribute", self.attribute)
         format_response = kwargs.pop("format_response", self.format_response)
-        required_fields = kwargs.pop("required_fields", self.required_fields)
 
         instance = self.__class__(
             method,
@@ -2012,7 +2007,6 @@ class Route:
             response_schema=response_schema,
             attribute=attribute,
             format_response=format_response,
-            required_fields=required_fields,
             **kwargs,
         )
 

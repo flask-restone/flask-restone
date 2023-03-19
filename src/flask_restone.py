@@ -1362,6 +1362,7 @@ class filters:                        # 过滤器的别名与代理
     EI = IEndsWithFilter              #
     BT = DateBetweenFilter            #
     
+    
 class SQLAlchemyBaseFilter(BaseFilter):
     namespace = "sql"
 
@@ -3294,44 +3295,47 @@ def principals(manager):
     return PrincipalsManager
 
 
-def schema_to_swag_dict(schema, tags=None):
-    print(schema)
-    rel = schema.get("rel")
-    if rel in ("self", "destroy") or rel.startswith("read"):
-        parameters = [
-            {
-                "name": "id",
-                "type": "string",
-                "in": "path",
-                "required": True,
-                "description": "the data source's uuid",
-            }
-        ]
-
-    elif rel.startswith("update"):
-        parameters = [
-            {
-                "name": "id",
-                "type": "string",
-                "in": "path",
-                "required": True,
-                "description": "the data source's uuid",
-            },
-            {"name": "Item", "in": "body", "schema": dict(schema.get("schema", {}))},
-        ]
-    elif rel == "instances":
-        parameters = []  # 查询的字段在参数里
-    elif rel == "create":
-        parameters = [{"name": "Item", "in": "body", "schema": dict(schema.get("schema", {}))}]
-    else:
-        parameters = []
-
-    dct = {
-        "tags": tags,
-        "parameters": parameters,
-        "responses": {"200": {"description": "正常返回", "examples": {"result": "success"}}},
+def schema_to_swag_dict(schema, tags=None, example=None):
+    flasgger_dict = {
+        'tags': tags,
+        'parameters': [],
+        'responses': {"200": {"description": "正常返回", "examples": example or {"result": "success"}}}
     }
-    return dct
+    _schema = schema.get("schema", {})
+    method = schema.get("method")
+    href = schema.get("href")
+    # Add parameters to Flasgger dict.
+    if "{id}" in href:
+        parameter = {
+            'in':'path',
+            'name'       : 'id',
+            'type'       : 'string',
+            'required'   : True,
+            'description': 'the ID of the resource'
+        }
+        flasgger_dict['parameters'].append(parameter)
+    for prop, details in _schema.get('properties',{}).items():
+        parameter = {
+            'name': prop,
+            'type': details['type'],
+            'required': _schema.get('required',False) and prop in _schema.get('required',False),
+            'description': details.get('description', '') or '\n'.join([f'{k}: {v}' for k, v in details.items() if k != 'type'])
+        }
+        if method == 'GET':
+            parameter['in'] = 'query'
+        elif method == 'POST':
+            parameter['in'] = 'formData'
+        else:
+            parameter['in'] = 'body'
+        flasgger_dict['parameters'].append(parameter)
+    # Add responses to Flasgger dict.
+    for status_code, details in _schema.get('responses', {}).items():
+        response = {
+            'description': details.get('description', ''),
+            'examples': details.get('examples', {})
+        }
+        flasgger_dict['responses'][status_code] = response
+    return flasgger_dict
 
 
 def schema_to_doc_dict(schema, route, tags=None, resource=None):
@@ -3507,14 +3511,14 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
 
     dct = {
         "title": route.description or title,
-        "url": schema["href"],
+        "href": schema["href"],
         "content_type": "text/plain" if schema["method"] == "GET" else "application/json",
         "method": schema["method"],
         "description": route.description or title,
         "request_args": request_args,
         "request_json": request_json,
         "response_args": response_args,
-        "response_json": response_json,
+        "response_example": response_json,
     }
     return dct
 

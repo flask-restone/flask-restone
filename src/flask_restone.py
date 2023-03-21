@@ -565,7 +565,7 @@ class BaseField(Schema):
 
     def faker(self):
         """假数据生成，用于测试"""
-        return "NotImplemented"
+        return NotImplemented
 
 
 class Any(BaseField):  # 可以用字典初始化
@@ -683,10 +683,10 @@ class Date(BaseField):
 
 class DateTime(Date):
     def formatter(self, value):
-        return {"$date": int(calendar.timegm(value.utctimetuple()) * 1000)}
+        return value.timestamp()
 
     def converter(self, value):
-        return datetime.datetime.fromtimestamp(value["$date"] / 1000, datetime.timezone.utc)
+        return datetime.datetime.fromtimestamp(value, datetime.timezone.utc)
 
 
 class DateString(BaseField):
@@ -797,10 +797,28 @@ def _field_from_object(parent, schema_cls_or_obj):  # 从对象获取字段
     else:
         container = schema_cls_or_obj  # 实例
     if not isinstance(container, Schema):  # 实例不是格式类
-        raise RuntimeError(f"{parent} expected Raw or Schema, but got {container.__class__.__name__}")
+        raise RuntimeError(f"{parent} expected BaseField or Schema, but got {container.__class__.__name__}")
     if not isinstance(container, BaseField):  # 实例不是Raw类是Schema类
         container = BaseField(container)  # 用Raw类包裹
     return container
+
+
+class AnyOf(BaseField):
+    """anyOf关键字表示一个模式可以匹配多个模式中的任意一个，
+    即任意一个模式匹配成功，则整个模式匹配成功。
+    anyOf关键字的使用场景是，需要指定一个字段可以匹配多种类型。
+    """
+    def __init__(self, *subschemas, **kwargs):
+        self.subschemas = subschemas
+        for subschema in subschemas:
+            if not isinstance(subschema, BaseField):
+                raise ValueError("All subschemas must be instances of BaseField")
+        super().__init__({"anyOf": [subschema.response for subschema in subschemas]}, **kwargs)
+    
+    def faker(self):
+        faker_funcs = [subschema.faker for subschema in self.subschemas]
+        faker_func = _faker.random.choice(faker_funcs)
+        return faker_func()
 
 
 class Array(BaseField, ResourceMixin):

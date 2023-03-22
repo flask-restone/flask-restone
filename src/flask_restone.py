@@ -1,13 +1,13 @@
 # restone makes you the rest one
 
-import calendar
-import datetime
+
 import decimal
 import inspect
 import random
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from functools import partial, wraps
 from importlib import import_module
 from operator import attrgetter, itemgetter
@@ -22,7 +22,8 @@ from flask import current_app, g, json, jsonify, make_response, request
 from flask.signals import Namespace
 from flask_principal import ItemNeed, Permission, RoleNeed, UserNeed
 from flask_sqlalchemy import Pagination as SAPagination
-from jsonschema import ValidationError as _ValidationError, Draft4Validator, FormatChecker
+from jsonschema import (Draft4Validator, FormatChecker,
+                        ValidationError as _ValidationError)
 from sqlalchemy import String as String_, and_, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
@@ -733,9 +734,9 @@ class Date(BaseField):
 
     def converter(self, value):
         converter = {
-            "string": lambda value: datetime.datetime.strptime(value, "%Y-%m-%d").date(),
-            "integer": lambda value: datetime.date.fromtimestamp(value * 86400),
-            "object": lambda value: datetime.date.fromtimestamp(value["$date"] * 86400),
+            "string": lambda value: datetime.strptime(value, "%Y-%m-%d").date(),
+            "integer": lambda value: date.fromtimestamp(value * 86400),
+            "object": lambda value: date.fromtimestamp(value["$date"] * 86400),
         }.get(self.type)
         return converter(value)
 
@@ -761,7 +762,7 @@ class DateTime(BaseField):
 
     def formatter(self, value):
         if value.tzinfo is None:
-            value = value.replace(tzinfo=datetime.timezone.utc)
+            value = value.replace(tzinfo=timezone.utc)
         formatter = {
             "string": lambda value: value.isoformat(),
             "integer": lambda value: int(value.timestamp()),
@@ -772,10 +773,10 @@ class DateTime(BaseField):
 
     def converter(self, value):
         converter = {
-            "string": lambda value: datetime.datetime.fromisoformat(value),
-            "integer": lambda value: datetime.datetime.fromtimestamp(value, datetime.timezone.utc),
-            "number": lambda value: datetime.datetime.fromtimestamp(value, datetime.timezone.utc),
-            "object": lambda value: datetime.datetime.fromtimestamp(value["$datetime"], datetime.timezone.utc),
+            "string": lambda value: datetime.fromisoformat(value),
+            "integer": lambda value: datetime.fromtimestamp(value, timezone.utc),
+            "number": lambda value: datetime.fromtimestamp(value, timezone.utc),
+            "object": lambda value: datetime.fromtimestamp(value["$datetime"], timezone.utc),
         }.get(self.type)
         return converter(value)
 
@@ -815,9 +816,7 @@ class Integer(BaseField):
         return random.randint(minimum, maximum)
 
 
-class PositiveInteger(Integer):
-    def __init__(self, maximum=None, **kwargs):
-        super().__init__(minimum=1, maximum=maximum, **kwargs)
+
 
 
 class Number(BaseField):
@@ -882,7 +881,7 @@ class AnyOf(BaseField):
 
     def faker(self):
         faker_funcs = [subschema.faker for subschema in self.subschemas]
-        faker_func = _faker.random.choice(faker_funcs)
+        faker_func = random.choice(faker_funcs)
         return faker_func()
 
 
@@ -2666,8 +2665,8 @@ class Manager:
                 bool: Boolean,
                 list: Array,
                 dict: Object,
-                datetime.date: Date,
-                datetime.datetime: DateTime,
+                date: Date,
+                datetime: DateTime,
                 decimal.Decimal: Number,
             }[python_type]
         except KeyError:
@@ -3842,11 +3841,10 @@ class fields:  # noqa
     Email = Email
     Date = Date
     DateTime = DateTime
-
     Boolean = Boolean
     Integer = Integer
     Number = Number
-    PositiveInteger = PositiveInteger
+
     Array = Array
     Object = Object
     Inline = Inline

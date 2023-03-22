@@ -72,13 +72,7 @@ __all__ = [
 _faker = Faker()
 # ---------------------------HTTP常量--------------------
 HTTP_METHODS = ("GET", "PUT", "POST", "PATCH", "DELETE")
-HTTP_VERBS = {
-    "GET": "read",
-    "PUT": "create",
-    "POST": "create",
-    "PATCH": "update",
-    "DELETE": "destroy",
-}
+
 PAGE = "page"
 PER_PAGE = "per_page"
 
@@ -712,60 +706,78 @@ class Email(String):
 
 
 class Date(BaseField):
-    def __init__(self, **kwargs):
-        super().__init__(
-            {
-                "type": "object",
-                "properties": {"$date": {"type": "integer"}},
-                "additionalProperties": False,
-            },
-            **kwargs,
-        )
+    TYPE_MAPPING = {
+        "string": {"type": "string", "format": "date"},
+        "integer": {"type": "integer"},
+        "object": {
+            "type": "object",
+            "properties": {"$date": {"type": "integer"}},
+            "additionalProperties": False,
+        },
+    }
 
-    def formatter(self, value):  # 时间戳
-        return {"$date": int(calendar.timegm(value.timetuple()) * 1000)}
-
-    def converter(self, value):
-        return datetime.datetime.fromtimestamp(value["$date"] / 1000, datetime.timezone.utc).date()
-
-    def faker(self):
-        date = _faker.date_time()
-        return self.formatter(date)
-
-
-class DateTime(Date):
-    def formatter(self, value):
-        return int(value.timestamp())  # todo
-
-    def converter(self, value):
-        return datetime.datetime.fromtimestamp(value, datetime.timezone.utc)
-
-
-class DateString(BaseField):
-    def __init__(self, **kwargs):
-        super().__init__({"type": "string", "format": "date"}, **kwargs)
+    def __init__(self, type="string", **kwargs):
+        self.type = type
+        schema = self.TYPE_MAPPING.get(type)
+        if not schema:
+            raise ValueError(f"Invalid type '{type}'")
+        super().__init__(schema, **kwargs)
 
     def formatter(self, value):
-        return value.strftime("%Y-%m-%d")
+        formatter = {
+            "string": lambda value: value.isoformat(),
+            "integer": lambda value: int(value.timestamp() / 86400),
+            "object": lambda value: {"$date": int(value.timestamp() / 86400)},
+        }.get(self.type)
+        return formatter(value)
 
     def converter(self, value):
-        return datetime.datetime.fromisoformat(value).date()  # todo 3.7+
+        converter = {
+            "string": lambda value: datetime.datetime.strptime(value, "%Y-%m-%d").date(),
+            "integer": lambda value: datetime.date.fromtimestamp(value * 86400),
+            "object": lambda value: datetime.date.fromtimestamp(value["$date"] * 86400),
+        }.get(self.type)
+        return converter(value)
 
-    def faker(self):
-        return _faker.date()
 
+class DateTime(BaseField):
+    TYPE_MAPPING = {
+        "string": {"type": "string", "format": "date-time"},
+        "integer": {"type": "integer"},
+        "number": {"type": "number"},
+        "object": {
+            "type": "object",
+            "properties": {"$datetime": {"type": "integer"}},
+            "additionalProperties": False,
+        },
+    }
 
-class DateTimeString(BaseField):
-    def __init__(self, **kwargs):
-        super().__init__({"type": "string", "format": "date-time"}, **kwargs)
+    def __init__(self, type="string", **kwargs):
+        self.type = type
+        schema = self.TYPE_MAPPING.get(type)
+        if not schema:
+            raise ValueError(f"Invalid type '{type}'")
+        super().__init__(schema, **kwargs)
 
     def formatter(self, value):
         if value.tzinfo is None:
             value = value.replace(tzinfo=datetime.timezone.utc)
-        return value.isoformat()
+        formatter = {
+            "string": lambda value: value.isoformat(),
+            "integer": lambda value: int(value.timestamp()),
+            "number": lambda value: value.timestamp(),
+            "object": lambda value: {"$date": int(value.timestamp())},
+        }.get(self.type)
+        return formatter(value)
 
     def converter(self, value):
-        return datetime.datetime.fromisoformat(value)
+        converter = {
+            "string": lambda value: datetime.datetime.fromisoformat(value),
+            "integer": lambda value: datetime.datetime.fromtimestamp(value, datetime.timezone.utc),
+            "number": lambda value: datetime.datetime.fromtimestamp(value, datetime.timezone.utc),
+            "object": lambda value: datetime.datetime.fromtimestamp(value["$datetime"], datetime.timezone.utc),
+        }.get(self.type)
+        return converter(value)
 
     def faker(self):
         date = _faker.date_time()
@@ -851,7 +863,7 @@ def _field_from_object(parent, schema_cls_or_obj):  # 从对象获取字段
     if not isinstance(container, Schema):  # 实例不是格式类
         raise RuntimeError(f"{parent} expected BaseField or Schema, but got {container.__class__.__name__}")
     if not isinstance(container, BaseField):  # 实例不是Raw类是Schema类
-        container = BaseField(container)  # 用Raw类包裹
+        container = BaseField(container)
     return container
 
 
@@ -994,7 +1006,7 @@ class Object(BaseField, ResourceMixin):
         super().__init__(schema, **kwargs)
 
     def bind(self, resource):
-        # 是不是说满足某个模式的字段都用一个字段类，比如 {{".*_time":DateTimeString}}
+        # 是不是说满足某个模式的字段都用一个字段类，比如 {{".*_time":DateTime}}
         if self.properties:
             self.properties = {key: _bind_schema(value, resource) for (key, value) in self.properties.items()}
         if self.pattern_props:
@@ -1353,7 +1365,7 @@ class BaseFilter(Schema):
             return Array(self._field, min_items=2, max_items=2)
         if self.name in ("ct", "ci", "sw", "si", "ew", "ei"):
             return String(min_length=1)
-        if not isinstance(self._field, (Date, DateTime, DateString, DateTimeString)):
+        if not isinstance(self._field, (Date, DateTime)):
             return Number()
         return self._field
 
@@ -1534,9 +1546,7 @@ FIELD_FILTERS_DICT = {
     Array: ("ha",),
     Boolean: ("eq", "ne", "in", "ni"),
     Date: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
-    DateString: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
     DateTime: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
-    DateTimeString: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
     Integer: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
     ItemUri: ("eq", "ne", "in", "ni"),
     Number: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
@@ -1637,9 +1647,9 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         request_schema = {
             "type": "object",
             "properties": {
-                "where"      : self._filter_schema,
-                "sort"       : self._sort_schema,
-                PAGE         : {"type": "integer", "minimum": 1, "default": 1},
+                "where": self._filter_schema,
+                "sort": self._sort_schema,
+                PAGE: {"type": "integer", "minimum": 1, "default": 1},
                 PER_PAGE: {
                     "type": "integer",
                     "minimum": 1,
@@ -1862,6 +1872,261 @@ def camel_case(s):
     return s[0].lower() + s.title().replace("_", "")[1:] if s else s
 
 
+def route_from(url, method=None):
+    appctx = _app_ctx_stack.top
+    reqctx = _request_ctx_stack.top
+    if appctx is None:
+        raise RuntimeError("Attempted to match a URL without the application context being pushed. This has to be executed when application context is available.")
+    if reqctx is not None:
+        url_adapter = reqctx.url_adapter
+    else:
+        url_adapter = appctx.url_adapter
+        if url_adapter is None:
+            raise RuntimeError("Application was not able to create a URL adapter for request independent URL matching. You might be able to fix this by setting the SERVER_NAME config variable.")
+    parsed_url = url_parse(url)
+    if parsed_url.netloc not in ("", url_adapter.server_name):
+        raise PageNotFound()
+    return url_adapter.match(parsed_url.path, method)
+
+
+def unpack(value):
+    if not isinstance(value, tuple):
+        return value, 200, {}
+    if len(value) == 2:
+        return value[0], value[1], {}
+    return value
+
+
+def get_value(key, obj, default=None):
+    if hasattr(obj, "__getitem__"):
+        try:
+            return obj[key]
+        except (IndexError, TypeError, KeyError):
+            pass
+    return getattr(obj, key, default)
+
+
+# -----------------自动路由----------------------------------------------
+def _route_decorator(method):  # 路由装饰器
+    def decorator(cls, *args, **kwargs):
+        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
+            return cls(method, args[0])  # 没有关键字参数只有一个位置参数的视图函数
+            # 这个位置参数就是路由endpoint 如 /instances
+        return lambda f: cls(method, f, *args, **kwargs)  # 返回函数 返回的是路由类
+
+    decorator.__name__ = method
+    return classmethod(decorator)
+
+
+def _method_decorator(method):
+    def wrapper(self, *args, **kwargs):
+        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
+            return self.for_method(method, args[0], **kwargs)
+        return lambda f: self.for_method(method, f, *args, **kwargs)
+
+    wrapper.__name__ = method
+    return wrapper
+
+
+class Route:
+    HTTP_VERBS = {
+        "GET": "read",
+        "PUT": "update",
+        "POST": "create",
+        "PATCH": "update",
+        "DELETE": "destroy",
+    }
+
+    def __init__(
+        self,
+        method=None,
+        view_func=None,
+        rule=None,
+        attribute=None,
+        rel=None,
+        title=None,
+        description=None,
+        schema=None,
+        response_schema=None,
+        format_response=True,
+        success_code=None,
+    ):
+        self.rel = rel  # 关系
+        self.rule = rule  # 规则
+        self.method = method  # get/post
+        self.attribute = attribute  # 属性？
+        self.title = title  # 标题？网页标题
+        self.description = description  # 网页描述？
+        self.view_func = view_func  # 视图函数
+        self.format_response = format_response  # 是否格式化响应
+        self.success_code = success_code  # 状态码
+
+        annotations = getattr(view_func, "__annotations__", None)  # 获取视图函数的注解
+        if isinstance(annotations, dict) and annotations:
+            self.request_schema = FieldSet({name: field for (name, field) in annotations.items() if name != "return"})  # 请求的语法就是参数名和参数字段类型的字段集，响应也有字段
+            self.response_schema = annotations.get("return", response_schema)
+        else:  # 没有标注则要指定参数
+            self.request_schema = schema
+            self.response_schema = response_schema
+
+        self._related_routes = ()  # 相关的路由
+        for method in HTTP_METHODS:
+            setattr(self, method, MethodType(_method_decorator(method), self))  # 把方法绑定到类的实例中
+            setattr(self, method.lower(), getattr(self, method))  # 忽略大小写GET成为装饰器
+
+    @property
+    def relation(self):  # 关系型数据资源
+        if self.rel:
+            return self.rel  # 关联字符串 read_status?
+
+        verb = self.HTTP_VERBS.get(self.method, self.method.lower())
+        return camel_case(f"{verb}_{self.attribute}")
+
+    def schema_factory(self, resource):  # 规则工厂 将路由的请求与响应规则绑定到资源上
+        request_schema = _bind_schema(self.request_schema, resource)
+        response_schema = _bind_schema(self.response_schema, resource)
+        schema = OrderedDict(
+            [
+                ("rel", self.relation),
+                (
+                    "href",
+                    re.sub(
+                        "<(\\w+:)?([^>]+)>",
+                        "{\\2}",
+                        self.rule_factory(resource, relative=False),
+                    ),
+                ),
+                ("method", self.method),
+            ]  # 关联
+        )
+        if self.title:
+            schema["title"] = self.title
+        if self.description:
+            schema["description"] = self.description
+        if request_schema:
+            schema["schema"] = request_schema.request  # 请求格式的请求部分
+        if response_schema:
+            schema["targetSchema"] = response_schema.response  # 响应格式的响应部分
+        return schema
+
+    def for_method(
+        self,
+        method,
+        view_func,
+        rel=None,
+        title=None,
+        description=None,
+        schema=None,
+        response_schema=None,
+        **kwargs,
+    ):
+        attribute = kwargs.pop("attribute", self.attribute)
+        format_response = kwargs.pop("format_response", self.format_response)
+
+        instance = self.__class__(
+            method,
+            view_func,
+            rule=self.rule,
+            rel=rel,
+            title=title,
+            description=description,
+            schema=schema,
+            response_schema=response_schema,
+            attribute=attribute,
+            format_response=format_response,
+            **kwargs,
+        )
+
+        instance._related_routes = self._related_routes + (self,)
+        return instance
+
+    # 存在了__get__的方法的类称之为描述符类
+    # descriptor 的实例自己访问自己是不会触发__get__ ，而会触发__call__，
+    # 只有 descriptor 作为其它类的属性的时候才会触发 __get___
+    # 可以通过ModelResource().get()
+    def __get__(self, obj, owner):  # 返回的是个视图函数或类，obj是自己的对象，owner是自己的所属类
+        if obj is None:
+            return self
+        return lambda *args, **kwargs: self.view_func.__call__(obj, *args, **kwargs)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({repr(self.rule)})"
+
+    @property
+    def request_schema(self):
+        return self.schema  # 先调用了setter方法所以存在
+
+    @request_schema.setter
+    def request_schema(self, schema):
+        self.schema = schema
+
+    def rule_factory(self, resource, relative=False):  # 规则工厂
+        rule = self.rule  # 规则是个字符串
+        if rule is None:
+            rule = f"/{_(self.attribute)}"
+            # self.attribute 可以关联到资源属性和rule二选一
+            # Route.get('/status') 是 rule
+            # Route.get(attribute='status') 是属性
+        elif callable(rule):  # 规则可以调用资源
+            rule = rule(resource)
+        if relative or resource.route_prefix is None:
+            return rule[1:]
+        return "".join((resource.route_prefix, rule))
+
+    def view_factory(self, name, resource):  # 视图工厂
+        request_schema = _bind_schema(self.request_schema, resource)
+        response_schema = _bind_schema(self.response_schema, resource)
+        view_func = self.view_func
+
+        def view(*args, **kwargs):
+            instance = resource()  # 资源实例
+            if isinstance(request_schema, (FieldSet, Instances)):  # 请求字段集和实例集
+                kwargs.update(request_schema.parse_request(request))  # 上文实现了
+            elif isinstance(request_schema, Schema):  # 普通的格式
+                args += (request_schema.parse_request(request),)  # 为何是元组
+            response = view_func(instance, *args, **kwargs)
+            if not isinstance(response, tuple) and self.success_code:
+                response = (response, self.success_code)
+            if response_schema is None or not self.format_response:
+                return response
+            return response_schema.format_response(response)  # 格式化
+
+        return view
+
+
+for method in HTTP_METHODS:
+    setattr(Route, method, _route_decorator(method))
+    setattr(Route, method.lower(), getattr(Route, method))
+
+
+class ItemRoute(Route):  # 单个记录
+    def rule_factory(self, resource, relative=False):
+        rule = self.rule
+        id_matcher = f"<{resource.meta.id_converter}:id>"
+        if rule is None:
+            rule = f"/{_(self.attribute)}"
+        elif callable(rule):
+            rule = rule(resource)
+        if relative or resource.route_prefix is None:
+            return rule[1:]
+        return "".join((resource.route_prefix, "/", id_matcher, rule))
+
+    def view_factory(self, name, resource):
+        original_view = super().view_factory(name, resource)
+
+        def view(*args, **kwargs):
+            id = kwargs.pop("id")  # 可以不pop 用于过滤id
+            item = resource.manager.read(id)
+            return original_view(item, *args, **kwargs)
+
+        return view
+
+
+for method in HTTP_METHODS:
+    setattr(ItemRoute, method, _route_decorator(method))
+    setattr(ItemRoute, method.lower(), getattr(ItemRoute, method))
+
+
 class RouteSet:
     def routes(self):
         return ()
@@ -1950,15 +2215,14 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     response_schema=RelationInstances(self.target),
                     schema=FieldSet(
                         {
-                            PAGE    : Integer(minimum=1, default=1),
+                            PAGE: Integer(minimum=1, default=1),
                             PER_PAGE: Integer(minimum=1, default=20, maximum=50),
                         }
                     ),
                 )
             if "w" in io or "u" in io:
-                # book  #author
+
                 def relation_add(resource, item, target_item):
-                    # book001  #'author' #UserResource, user001
                     resource.manager.relation_add(item, self.attribute, self.target, target_item)
                     resource.manager.commit()
                     return target_item
@@ -1978,252 +2242,6 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     return None, 204
 
                 yield relation_route.for_method("DELETE", relation_remove, rel=camel_case(f"remove_{self.attribute}"))
-
-
-def route_from(url, method=None):
-    appctx = _app_ctx_stack.top
-    reqctx = _request_ctx_stack.top
-    if appctx is None:
-        raise RuntimeError("Attempted to match a URL without the application context being pushed. This has to be executed when application context is available.")
-    if reqctx is not None:
-        url_adapter = reqctx.url_adapter
-    else:
-        url_adapter = appctx.url_adapter
-        if url_adapter is None:
-            raise RuntimeError("Application was not able to create a URL adapter for request independent URL matching. You might be able to fix this by setting the SERVER_NAME config variable.")
-    parsed_url = url_parse(url)
-    if parsed_url.netloc not in ("", url_adapter.server_name):
-        raise PageNotFound()
-    return url_adapter.match(parsed_url.path, method)
-
-
-def unpack(value):
-    if not isinstance(value, tuple):
-        return value, 200, {}
-    if len(value) == 2:
-        return value[0], value[1], {}
-    return value
-
-
-def get_value(key, obj, default=None):
-    if hasattr(obj, "__getitem__"):
-        try:
-            return obj[key]
-        except (IndexError, TypeError, KeyError):
-            pass
-    return getattr(obj, key, default)
-
-
-# -----------------自动路由----------------------------------------------
-def _route_decorator(method):  # 路由装饰器
-    def decorator(cls, *args, **kwargs):
-        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
-            return cls(method, args[0])  # 没有关键字参数只有一个位置参数的视图函数
-            # 这个位置参数就是路由endpoint 如 /instances
-        return lambda f: cls(method, f, *args, **kwargs)  # 返回函数 返回的是路由类
-
-    decorator.__name__ = method
-    return classmethod(decorator)
-
-
-def _method_decorator(method):
-    def wrapper(self, *args, **kwargs):
-        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
-            return self.for_method(method, args[0], **kwargs)
-        return lambda f: self.for_method(method, f, *args, **kwargs)
-
-    wrapper.__name__ = method
-    return wrapper
-
-
-class Route:
-    def __init__(
-        self,
-        method=None,
-        view_func=None,
-        rule=None,
-        attribute=None,
-        rel=None,
-        title=None,
-        description=None,
-        schema=None,
-        response_schema=None,
-        format_response=True,
-        success_code=None,
-    ):
-        self.rel = rel  # 关系
-        self.rule = rule  # 规则
-        self.method = method  # get/post
-        self.attribute = attribute  # 属性？
-        self.title = title  # 标题？网页标题
-        self.description = description  # 网页描述？
-        self.view_func = view_func  # 视图函数
-        self.format_response = format_response  # 是否格式化响应
-        self.success_code = success_code  # 状态码
-
-        annotations = getattr(view_func, "__annotations__", None)  # 获取视图函数的注解
-        if isinstance(annotations, dict) and annotations:
-            self.request_schema = FieldSet({name: field for (name, field) in annotations.items() if name != "return"})  # 请求的语法就是参数名和参数字段类型的字段集，响应也有字段
-            self.response_schema = annotations.get("return", response_schema)
-        else:  # 没有标注则要指定参数
-            self.request_schema = schema
-            self.response_schema = response_schema
-
-        self._related_routes = ()  # 相关的路由
-        for method in HTTP_METHODS:
-            setattr(self, method, MethodType(_method_decorator(method), self))  # 把方法绑定到类的实例中
-            setattr(self, method.lower(), getattr(self, method))  # 忽略大小写GET成为装饰器
-
-    @property
-    def relation(self):  # 关系型数据资源
-        if self.rel:
-            return self.rel  # 关联字符串 read_status?
-
-        verb = HTTP_VERBS.get(self.method, self.method.lower())
-        return camel_case(f"{verb}_{self.attribute}")
-
-    def schema_factory(self, resource):  # 规则工厂 将路由的请求与响应规则绑定到资源上
-        request_schema = _bind_schema(self.request_schema, resource)
-        response_schema = _bind_schema(self.response_schema, resource)
-        schema = OrderedDict(
-            [
-                ("rel", self.relation),
-                (
-                    "href",
-                    re.sub(
-                        "<(\\w+:)?([^>]+)>",
-                        "{\\2}",
-                        self.rule_factory(resource, relative=False),
-                    ),
-                ),
-                ("method", self.method),
-            ]  # 关联
-        )
-        if self.title:
-            schema["title"] = self.title
-        if self.description:
-            schema["description"] = self.description
-        if request_schema:
-            schema["schema"] = request_schema.request  # 请求格式的请求部分
-        if response_schema:
-            schema["targetSchema"] = response_schema.response  # 响应格式的响应部分
-        return schema
-
-    def for_method(
-        self,
-        method,
-        view_func,
-        rel=None,
-        title=None,
-        description=None,
-        schema=None,
-        response_schema=None,
-        **kwargs,
-    ):
-        attribute = kwargs.pop("attribute", self.attribute)
-        format_response = kwargs.pop("format_response", self.format_response)
-
-        instance = self.__class__(
-            method,
-            view_func,
-            rule=self.rule,
-            rel=rel,
-            title=title,
-            description=description,
-            schema=schema,
-            response_schema=response_schema,
-            attribute=attribute,
-            format_response=format_response,
-            **kwargs,
-        )
-
-        instance._related_routes = self._related_routes + (self,)
-        return instance
-
-    # 存在了__get__的方法的类称之为描述符类
-    # descriptor 的实例自己访问自己是不会触发__get__ ，而会触发__call__，
-    # 只有 descriptor 作为其它类的属性的时候才会触发 __get___
-    def __get__(self, obj, owner):  # 返回的是个视图函数或类，obj是自己的对象，owner是自己的所属类
-        if obj is None:
-            return self
-        return lambda *args, **kwargs: self.view_func.__call__(obj, *args, **kwargs)
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({repr(self.rule)})"
-
-    @property
-    def request_schema(self):
-        return self.schema  # 先调用了setter方法所以存在
-
-    @request_schema.setter
-    def request_schema(self, schema):
-        self.schema = schema
-
-    def rule_factory(self, resource, relative=False):  # 规则工厂
-        rule = self.rule  # 规则是个字符串
-        if rule is None:
-            rule = f"/{_(self.attribute)}"
-            # self.attribute 可以关联到资源属性和rule二选一
-            # Route.get('/status') 是 rule
-            # Route.get(attribute='status') 是属性
-        elif callable(rule):  # 规则可以调用资源
-            rule = rule(resource)
-        if relative or resource.route_prefix is None:
-            return rule[1:]
-        return "".join((resource.route_prefix, rule))
-
-    def view_factory(self, name, resource):  # 视图工厂
-        request_schema = _bind_schema(self.request_schema, resource)
-        response_schema = _bind_schema(self.response_schema, resource)
-        view_func = self.view_func
-
-        def view(*args, **kwargs):
-            instance = resource()  # 资源实例
-            if isinstance(request_schema, (FieldSet, Instances)):  # 请求字段集和实例集
-                kwargs.update(request_schema.parse_request(request))  # 上文实现了
-            elif isinstance(request_schema, Schema):  # 普通的格式
-                args += (request_schema.parse_request(request),)  # 为何是元组
-            response = view_func(instance, *args, **kwargs)
-            if not isinstance(response, tuple) and self.success_code:
-                response = (response, self.success_code)
-            if response_schema is None or not self.format_response:
-                return response
-            return response_schema.format_response(response)  # 格式化
-
-        return view
-
-
-for method in HTTP_METHODS:
-    setattr(Route, method, _route_decorator(method))
-    setattr(Route, method.lower(), getattr(Route, method))
-
-
-class ItemRoute(Route):  # 单个记录
-    def rule_factory(self, resource, relative=False):
-        rule = self.rule
-        id_matcher = f"<{resource.meta.id_converter}:id>"
-        if rule is None:
-            rule = f"/{_(self.attribute)}"
-        elif callable(rule):
-            rule = rule(resource)
-        if relative or resource.route_prefix is None:
-            return rule[1:]
-        return "".join((resource.route_prefix, "/", id_matcher, rule))
-
-    def view_factory(self, name, resource):
-        original_view = super().view_factory(name, resource)
-
-        def view(*args, **kwargs):
-            id = kwargs.pop("id")  # 可以不pop 用于过滤id
-            item = resource.manager.read(id)
-            return original_view(item, *args, **kwargs)
-
-        return view
-
-
-for method in HTTP_METHODS:
-    setattr(ItemRoute, method, _route_decorator(method))
-    setattr(ItemRoute, method.lower(), getattr(ItemRoute, method))
 
 
 class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
@@ -2273,18 +2291,6 @@ class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
                 rel=camel_case(f"update_{route.attribute}"),
                 description=self.description,
             )
-
-
-def _make_response(data, code, headers=None):
-    settings = {}
-    if current_app.debug:
-        settings.setdefault("indent", 4)
-        settings.setdefault("sort_keys", True)
-    data = json.dumps(data, **settings)
-    resp = make_response(data, code)
-    resp.headers.extend(headers or {})
-    resp.headers["Content-Type"] = "application/json"
-    return resp
 
 
 class AttributeDict(dict):
@@ -2494,7 +2500,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         postgres_full_text_index = None
         cache = False  # 缓存
         key_converters = (RefKey(), IDKey())
-        datetime_formater = DateTimeString
+        datetime_formater = DateTime
         natural_key = None
 
 
@@ -2626,8 +2632,6 @@ class Manager:
                 Integer,
                 Date,
                 DateTime,
-                DateString,
-                DateTimeString,
                 Uri,
                 ItemUri,
             ),
@@ -3503,7 +3507,7 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
             type = ""
             if field:
                 type = "String"
-                if isinstance(field, (Date, DateTime, DateString, DateTimeString)):
+                if isinstance(field, (Date, DateTime)):
                     type = "Datetime"
                 elif isinstance(field, Integer):
                     type = "Integer"
@@ -3559,7 +3563,7 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
             type = ""
             if field:
                 type = "String"
-                if isinstance(field, (Date, DateTime, DateString, DateTimeString)):
+                if isinstance(field, (Date, DateTime)):
                     type = "Datetime"
                 elif isinstance(field, Integer):
                     type = "Integer"
@@ -3602,7 +3606,7 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
         for k, v in xxx.items():
             field = resource.schema.fields.get(k, None)
             type = "String"
-            if isinstance(field, (Date, DateTime, DateString, DateTimeString)):
+            if isinstance(field, (Date, DateTime)):
                 type = "Datetime"
             elif isinstance(field, Integer):
                 type = "Integer"
@@ -3656,6 +3660,18 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
         "response_json": response_json,
     }
     return dct
+
+
+def _make_response(data, code, headers=None):
+    settings = {}
+    if current_app.debug:
+        settings.setdefault("indent", 4)
+        settings.setdefault("sort_keys", True)
+    data = json.dumps(data, **settings)
+    resp = make_response(data, code)
+    resp.headers.extend(headers or {})
+    resp.headers["Content-Type"] = "application/json"
+    return resp
 
 
 class Api:
@@ -3826,8 +3842,7 @@ class fields:  # noqa
     Email = Email
     Date = Date
     DateTime = DateTime
-    DateString = DateString
-    DateTimeString = DateTimeString
+
     Boolean = Boolean
     Integer = Integer
     Number = Number

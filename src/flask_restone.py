@@ -79,6 +79,8 @@ HTTP_VERBS = {
     "PATCH": "update",
     "DELETE": "destroy",
 }
+PAGE = "page"
+PER_PAGE = "per_page"
 
 # ---------------------------信号量--------------------
 _signals = Namespace()
@@ -460,6 +462,21 @@ class BaseField(Schema):
         title 标题
         description 字段描述
     基本上和 ORM 的模型字段参数一样
+
+    JSON Schema的一般格式包括以下几个部分：
+    $schema：指定所使用的JSON Schema版本，例如："$schema": "http://json-schema.org/draft-07/schema#"
+    type：指定所描述的数据结构的类型，可以是object、array、number、string、integer、boolean、null等
+    title：指定所描述的数据结构的名称
+    description：对所描述的数据结构进行详细描述
+    properties：指定对象类型的属性及其约束条件，是一个键值对，其中键是属性名，值是约束条件，例如："properties": {"name": {"type": "string"}, "age": {"type": "integer", "minimum": 0}}
+    items：指定数组类型的元素及其约束条件，可以是单个元素的约束条件，也可以是元素类型的约束条件，例如："items": {"type": "string"}或"items": [{"type": "string"}, {"type": "integer"}]}
+    required：指定对象类型的必选属性，是一个数组，例如："required": ["name", "age"]
+    additionalProperties：指定对象类型的其他属性的约束条件，如果不允许任何其他属性，可以将其设置为false，例如："additionalProperties": false
+    minimum、maximum、exclusiveMinimum、exclusiveMaximum：指定数值类型的最小值、最大值及其开闭区间，例如："minimum": 0, "maximum": 100, "exclusiveMaximum": true
+    minLength、maxLength、pattern：指定字符串类型的长度和格式约束条件，例如："minLength": 3, "maxLength": 10, "pattern": "^[a-z]+$"
+    enum：指定枚举类型的取值范围，例如："enum": ["male", "female"]
+    format：指定字符串类型的格式约束条件，例如："format": "email"
+    $ref：引用其他JSON Schema定义的约束条件，例如："$ref": "http://json-schema.org/draft-07/schema#"
     """
 
     def __init__(
@@ -486,8 +503,7 @@ class BaseField(Schema):
             schema["readOnly"] = True
         if "null" in schema.get("type", []):  # type 就是类型
             self.nullable = True
-
-        if self.nullable:  # ??
+        elif self.nullable:
             if "enum" in schema and None not in schema["enum"]:
                 # 可以为空且枚举列表里没null
                 schema["enum"].append(None)
@@ -594,6 +610,42 @@ class Custom(BaseField):  # 自定义字段
 
 
 class String(BaseField):
+    """
+    JSON Schema的string类型的format包括：
+
+    date-time：日期时间格式，如：2018-11-13T20:20:39+00:00
+
+    date：日期格式，如：2018-11-13
+
+    time：时间格式，如：20:20:39+00:00
+
+    email：电子邮件地址格式，如：user@example.com
+
+    idn-email：国际化电子邮件地址格式，如：user@示例.公司
+
+    hostname：主机名格式，如：example.com
+
+    idn-hostname：国际化主机名格式，如：示例.公司
+
+    ipv4：IPv4地址格式，如：192.0.2.1
+
+    ipv6：IPv6地址格式，如：2001:0db8:85a3:0000:0000:8a2e:0370:7334
+
+    uri：URI格式，如：https://example.com/path/to/resource
+
+    uri-reference：URI引用格式，如：/path/to/resource
+
+    uri-template：URI模板格式，如：/path/{id}
+
+    json-pointer：JSON指针格式，如：/path/to/property
+
+    relative-json-pointer：相对JSON指针格式，如：2/property
+
+    regex：正则表达式格式，如：^[a-z]+$
+
+    uuid：UUID格式，如：123e4567-e89b-12d3-a456-426655440000
+    """
+
     url_rule_converter = "string"
 
     def __init__(
@@ -683,7 +735,7 @@ class Date(BaseField):
 
 class DateTime(Date):
     def formatter(self, value):
-        return value.timestamp()
+        return int(value.timestamp())  # todo
 
     def converter(self, value):
         return datetime.datetime.fromtimestamp(value, datetime.timezone.utc)
@@ -808,13 +860,14 @@ class AnyOf(BaseField):
     即任意一个模式匹配成功，则整个模式匹配成功。
     anyOf关键字的使用场景是，需要指定一个字段可以匹配多种类型。
     """
+
     def __init__(self, *subschemas, **kwargs):
-        self.subschemas = subschemas
-        for subschema in subschemas:
-            if not isinstance(subschema, BaseField):
-                raise ValueError("All subschemas must be instances of BaseField")
-        super().__init__({"anyOf": [subschema.response for subschema in subschemas]}, **kwargs)
-    
+        self.subschemas = list(subschemas)
+        # for subschema in subschemas:
+        #     if not isinstance(subschema, BaseField):
+        #         raise ValueError("All subschemas must be instances of BaseField")
+        super().__init__({"anyOf": [subschema.response for subschema in self.subschemas]}, **kwargs)
+
     def faker(self):
         faker_funcs = [subschema.faker for subschema in self.subschemas]
         faker_func = _faker.random.choice(faker_funcs)
@@ -860,7 +913,7 @@ class Array(BaseField, ResourceMixin):
         return [self.container.convert(v) for v in value]
 
     def faker(self):
-        return [self.container.faker() for _ in range(2)]
+        return [self.container.faker() for _ in range(self.response.get("minItems", 2))]
 
 
 class Object(BaseField, ResourceMixin):
@@ -997,7 +1050,7 @@ class Object(BaseField, ResourceMixin):
     def faker(self):
         output = {}
         if self.properties:
-            output = {k: f.faker() for (k, f) in self.properties.items()}
+            output = {k: f().faker() if isinstance(f, type) else f.faker() for (k, f) in self.properties.items()}
         return output
 
 
@@ -1259,7 +1312,6 @@ class ItemUri(BaseField):
         return f"{self.target.route_prefix}/{self.target.manager.id_field.faker()}"
 
 
-
 # -------------------过滤器-------------------------------------
 class Condition:  # 属性 过滤器 值
     def __init__(self, attribute, filter, value):
@@ -1362,26 +1414,27 @@ EndsWithFilter = filter_factory("ew", lambda a, b: a.endswith(b))
 IEndsWithFilter = filter_factory("ei", lambda a, b: a.lower().endswith(b.lower()))
 DateBetweenFilter = filter_factory("bt", lambda a, b: b[0] <= a <= b[1])
 
+
 @dataclass
-class filters:                        # 过滤器的别名与代理
-    LT = LessThanFilter               #
-    GT = GreaterThanFilter            #
-    EQ = EqualFilter                  #
-    NE = NotEqualFilter               #
-    LE = LessThanEqualFilter          #
-    GE = GreaterThanEqualFilter       #
-    IN = InFilter                     #
-    NI = NotInFilter                  #
-    HA = ContainsFilter               #
-    CT = StringContainsFilter         #
-    CI = StringIContainsFilter        #
-    SW = StartsWithFilter             #
-    SI = IStartsWithFilter            #
-    EW = EndsWithFilter               #
-    EI = IEndsWithFilter              #
-    BT = DateBetweenFilter            #
-    
-    
+class filters:  # 过滤器的别名与代理
+    LT = LessThanFilter  #
+    GT = GreaterThanFilter  #
+    EQ = EqualFilter  #
+    NE = NotEqualFilter  #
+    LE = LessThanEqualFilter  #
+    GE = GreaterThanEqualFilter  #
+    IN = InFilter  #
+    NI = NotInFilter  #
+    HA = ContainsFilter  #
+    CT = StringContainsFilter  #
+    CI = StringIContainsFilter  #
+    SW = StartsWithFilter  #
+    SI = IStartsWithFilter  #
+    EW = EndsWithFilter  #
+    EI = IEndsWithFilter  #
+    BT = DateBetweenFilter  #
+
+
 class SQLAlchemyBaseFilter(BaseFilter):
     namespace = "sql"
 
@@ -1514,7 +1567,7 @@ class PaginationMixin:  # 分页插件不能单独使用
             links.append((request.path, data.page + 1, data.per_page, "next"))
         links.append((request.path, max(data.pages, 1), data.per_page, "last"))
         headers = {
-            "Link": ",".join(['<{0}?page={1}&per_page={2}>; rel="{3}"'.format(*link) for link in links]),
+            "Link": ",".join(['<{0}?{page}={1}&{per_page}={2}>; rel="{3}"'.format(*link, page=PAGE, per_page=PER_PAGE) for link in links]),
             "X-Total-Count": data.total,
         }
         return self.format(data.items), 200, headers
@@ -1563,7 +1616,7 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         return {
             "type": "object",
             "properties": {name: self._field_filters_schema(filters) for (name, filters) in self._filters.items()},
-            "additionalProperties": True,
+            "additionalProperties": False,
         }
 
     @cached_property
@@ -1584,10 +1637,10 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         request_schema = {
             "type": "object",
             "properties": {
-                "where": self._filter_schema,
-                "sort": self._sort_schema,
-                "page": {"type": "integer", "minimum": 1, "default": 1},
-                "per_page": {
+                "where"      : self._filter_schema,
+                "sort"       : self._sort_schema,
+                PAGE         : {"type": "integer", "minimum": 1, "default": 1},
+                PER_PAGE: {
                     "type": "integer",
                     "minimum": 1,
                     "maximum": current_app.config["RESTONE_MAX_PER_PAGE"],
@@ -1600,8 +1653,8 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         return response_schema, request_schema
 
     def parse_request(self, request):  # where 和 sort 是json字符串
-        page = request.args.get("page", 1, type=int)
-        per_page = request.args.get("per_page", current_app.config["RESTONE_DEFAULT_PER_PAGE"], type=int)
+        page = request.args.get(PAGE, 1, type=int)
+        per_page = request.args.get(PER_PAGE, current_app.config["RESTONE_DEFAULT_PER_PAGE"], type=int)
         style = current_app.config["RESTONE_DEFAULT_PARSE_STYLE"]  # 新增了可配置的查询风格
         try:
             if style == "json":
@@ -1610,7 +1663,9 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
                 sort, where = self.parse_where_sort_by_args(request)
         except ValueError:
             raise InvalidJSON()
-        result = self.convert({"page": page, "per_page": per_page, "where": where, "sort": sort})
+        result = {"page": page, "per_page": per_page, "where": where, "sort": sort}
+        # todo:条件校验系统由bug暂时不校验
+        # result = self.convert({PAGE: page, PER_PAGE: per_page, "where": where, "sort": sort})
         return result
 
     def format(self, items):
@@ -1644,7 +1699,7 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         where = OrderedDict()
         sort = OrderedDict()
         for key, value in request.args.items():
-            if key in ("page", "per_page", "sort"):
+            if key in (PAGE, PER_PAGE, "sort"):
                 continue
             if "__" in key:
                 attr, op = key.rsplit("__", 1)
@@ -1814,11 +1869,12 @@ class RouteSet:
 
 class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
     # 用法 author = Relation("UserResource",backref="book",attribute='author')
-    def __init__(self, resource, backref=None, io="rw", attribute=None):
+    def __init__(self, resource, backref=None, single=True, io="rw", attribute=None):
         self.reference = ResourceReference(resource)  # 找到关联的资源类
         self.attribute = attribute  # 属性名
         self.backref = backref  # 反向引用名
         self.io = io
+        self.single = single
 
     @cached_property
     def target(self):
@@ -1829,46 +1885,99 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
         rule = f"/{_(self.attribute)}"  # /author
         relation_route = ItemRoute(rule=f"{rule}/<{self.target.meta.id_converter}:target_id>")  # /book/001/author/<sid>
         relations_route = ItemRoute(rule=rule)  # /author
-        if "r" in io:
+        if self.single:
+            if "r" in io:
 
-            def relation_instances(resource, item, page, per_page):
-                return resource.manager.relation_instances(item, self.attribute, self.target, page, per_page)
+                def relation_instance(resource, item):  # 一对一
+                    return getattr(item, self.attribute)
 
-            yield relations_route.for_method(
-                "GET",
-                relation_instances,
-                rel=self.attribute,
-                response_schema=RelationInstances(self.target),
-                schema=FieldSet(
-                    {
-                        "page": Integer(minimum=1, default=1),
-                        "per_page": Integer(minimum=1, default=20, maximum=50),
-                    }
-                ),
-            )
-        if "w" in io or "u" in io:
-            # book  #author
-            def relation_add(resource, item, target_item):
-                # book001  #'author' #UserResource, user001
-                resource.manager.relation_add(item, self.attribute, self.target, target_item)
-                resource.manager.commit()
-                return target_item
+                yield relations_route.for_method(
+                    "GET",
+                    relation_instance,
+                    rel=camel_case(f"read_{self.attribute}"),
+                    response_schema=Inline(self.target),
+                )
+            if "c" in io:
 
-            yield relations_route.for_method(
-                "POST",
-                relation_add,
-                rel=camel_case(f"add_{self.attribute}"),
-                response_schema=ToOne(self.target),
-                schema=ToOne(self.target),
-            )
+                def create_relation_instance(resource, item, properties):  # 一对一
+                    target_item = self.target.manager.create(properties)
+                    resource.manager.relation_add(item, self.attribute, self.target, target_item)
+                    resource.manager.commit()
+                    return target_item
 
-            def relation_remove(resource, item, target_id):
-                target_item = self.target.manager.read(target_id)
-                resource.manager.relation_remove(item, self.attribute, self.target, target_item)
-                resource.manager.commit()
-                return None, 204
+                yield relations_route.for_method(
+                    "POST",
+                    create_relation_instance,
+                    rel=camel_case(f"create_{self.attribute}"),
+                    response_schema=ToOne(self.target),
+                    schema=Inline(self.target),
+                )
+            if "u" in io:
 
-            yield relation_route.for_method("DELETE", relation_remove, rel=camel_case(f"remove_{self.attribute}"))
+                def update_relation_instance(resource, item, changes):
+                    target_item = getattr(item, self.attribute)
+                    target_item = self.target.manager.update(target_item, changes)
+                    return target_item
+
+                yield relations_route.for_method(
+                    "PATCH",
+                    update_relation_instance,
+                    rel=camel_case(f"update_{self.attribute}"),
+                    response_schema=ToOne(self.target),
+                    schema=Inline(self.target, patchable=True),
+                )
+
+                def delete_relation_instance(resource, item):  # 删除单个item并移除关系
+                    target_item = getattr(item, self.attribute)
+                    resource.manager.relation_remove(item, self.attribute, self.target, target_item)
+                    resource.manager.commit()
+                    self.target.manager.delete(target_item)
+                    return None, 204
+
+                yield relations_route.for_method("DELETE", delete_relation_instance, rel=camel_case(f"remove_{self.attribute}"))
+        else:
+            if "r" in io:
+
+                def relation_instances(resource, item, **kwargs):  # 一对多
+                    page = kwargs.get(PAGE, None)
+                    per_page = kwargs.get(PER_PAGE, None)
+                    return resource.manager.relation_instances(item, self.attribute, self.target, page=page, per_page=per_page)
+
+                yield relations_route.for_method(
+                    "GET",
+                    relation_instances,
+                    rel=self.attribute,
+                    response_schema=RelationInstances(self.target),
+                    schema=FieldSet(
+                        {
+                            PAGE    : Integer(minimum=1, default=1),
+                            PER_PAGE: Integer(minimum=1, default=20, maximum=50),
+                        }
+                    ),
+                )
+            if "w" in io or "u" in io:
+                # book  #author
+                def relation_add(resource, item, target_item):
+                    # book001  #'author' #UserResource, user001
+                    resource.manager.relation_add(item, self.attribute, self.target, target_item)
+                    resource.manager.commit()
+                    return target_item
+
+                yield relations_route.for_method(
+                    "POST",
+                    relation_add,
+                    rel=camel_case(f"add_{self.attribute}"),
+                    response_schema=ToOne(self.target),
+                    schema=ToOne(self.target),
+                )
+
+                def relation_remove(resource, item, target_id):
+                    target_item = self.target.manager.read(target_id)
+                    resource.manager.relation_remove(item, self.attribute, self.target, target_item)
+                    resource.manager.commit()
+                    return None, 204
+
+                yield relation_route.for_method("DELETE", relation_remove, rel=camel_case(f"remove_{self.attribute}"))
 
 
 def route_from(url, method=None):
@@ -2073,7 +2182,7 @@ class Route:
             if isinstance(request_schema, (FieldSet, Instances)):  # 请求字段集和实例集
                 kwargs.update(request_schema.parse_request(request))  # 上文实现了
             elif isinstance(request_schema, Schema):  # 普通的格式
-                args += (request_schema.parse_request(request),)  # 为何是元组？
+                args += (request_schema.parse_request(request),)  # 为何是元组
             response = view_func(instance, *args, **kwargs)
             if not isinstance(response, tuple) and self.success_code:
                 response = (response, self.success_code)
@@ -2112,6 +2221,11 @@ class ItemRoute(Route):  # 单个记录
         return view
 
 
+for method in HTTP_METHODS:
+    setattr(ItemRoute, method, _route_decorator(method))
+    setattr(ItemRoute, method.lower(), getattr(ItemRoute, method))
+
+
 class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
     def __init__(self, schema_cls_or_obj, io=None, attribute=None, description=None):
         self.field = _field_from_object(ItemAttributeRoute, schema_cls_or_obj)
@@ -2124,6 +2238,7 @@ class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
         field = self.field
         route = ItemRoute(attribute=self.attribute)
         attribute = field.attribute or route.attribute
+
         if "r" in io:  # 读属性的路由
 
             def read_attribute(resource, item):
@@ -2147,14 +2262,7 @@ class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
         if "u" in io:  # 更新属性的路由
 
             def update_attribute(resource, item, value):  # 直接post一个string即可
-                if hasattr(resource, f"before_update_{attribute}"):  # 直接调用source的钩子
-                    getattr(resource, f"before_update_{attribute}")(item, value)  # 也可以直接改为信号发射
-
                 item = resource.manager.update(item, {attribute: value})
-
-                if hasattr(resource, f"after_update_{attribute}"):  # 直接调用source的钩子
-                    getattr(resource, f"after_update_{attribute}")(item, value)  # 也可以直接改为信号发射
-
                 return get_value(attribute, item, field.default)
 
             yield route.for_method(
@@ -2212,7 +2320,7 @@ class ResourceMeta(type):
                     meta[k] = v
             # 20日新增功能，指定默认日期
             model = meta.get("model", None)
-            datetime_field_class = meta.get("datetime_formater")
+            datetime_field_class = meta.get("datetime_formatter")
             if model and datetime_field_class:
                 for k, field in model.__dict__.items():
                     if not k.startswith("__") and hasattr(field, "type"):
@@ -2305,6 +2413,12 @@ class ModelResourceMeta(ResourceMeta):
 class ModelResource(Resource, metaclass=ModelResourceMeta):
     manager = None
 
+    @classmethod
+    def faker(cls, io="r"):
+        if io == "r":
+            return {k: f.faker() for k, f in cls.schema.fields.items()}
+        return {k: f.faker() for k, f in cls.schema.fields.items() if f.io != "r"}
+
     @Route.GET("", rel="instances")
     def instances(self, **kwargs):
         return self.manager.paginated_instances(**kwargs)
@@ -2326,8 +2440,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
             else:
                 props[k] = v
         # 全部能创建成功才能打包提交
-        item = self.manager.create(props, commit=False)
-        self.manager.commit()
+        item = self.manager.create(props, commit=True)
         for manager in inlines:
             manager.commit()
 
@@ -2356,10 +2469,6 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         self.manager.delete_by_id(id)
         return None, 204
 
-    @classmethod
-    def faker(cls):
-        return {k: f.faker() for k, f in cls.schema.fields.items()}
-
     class Schema:  # 设置各个字段的语法用的
         pass
 
@@ -2374,13 +2483,13 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         include_fields = None  # 包括
         exclude_fields = None  # 不包括
         filters = True  # 过滤
+        fuzzy_fields = ()
         permissions = {
             "read": "anyone",
             "create": "nobody",
             "update": "create",
             "delete": "update",
         }
-        fuzzy_fields = ()
         postgres_text_search_fields = ()
         postgres_full_text_index = None
         cache = False  # 缓存
@@ -2447,7 +2556,7 @@ class Manager:
             elif name == "$like":
                 or_expressions = []
                 for field_name in self.resource.meta.get("fuzzy_fields", ()):
-                    condition = self.convert_filters({"$ict": value["$eq"]}, self.filters[field_name])
+                    condition = self.convert_filters({"$ci": value["$eq"]}, self.filters[field_name])
                     or_expressions.append(self._expression_for_condition(condition))
                 yield self._or_expression(or_expressions)
             else:
@@ -2497,7 +2606,7 @@ class Manager:
                     field_filters = {name: filter for (name, filter) in field_filters.items() if name in field_expression}
                 elif field_expression is not True:
                     continue
-            elif isinstance(filters_expression, (tuple, list)):  # 可以用的国过滤器
+            elif isinstance(filters_expression, (tuple, list)):  # 可以用的过滤器
                 if field_name in filters_expression:
                     filters[field_name] = field_filters
                 continue
@@ -2584,6 +2693,9 @@ class Manager:
         except IndexError:
             raise ItemNotFound(self.resource, where=where)
 
+    def all(self, where=None, sort=None):
+        pass
+
     def create(self, properties, commit=True):
         pass
 
@@ -2657,13 +2769,12 @@ class RelationalManager(Manager):
         if query is None:
             return []
         if where:
-            where = tuple(self._convert_filters(where))  # fix
+            where = tuple(self._convert_filters(where))
             expressions = [self._expression_for_condition(condition) if isinstance(condition, Condition) else condition for condition in where]
             query = self._query_filter(query, self._and_expression(expressions))
-
-        sort = tuple(self._convert_sort(sort))
-        query = self._query_order_by(query, sort)
-
+        if sort:
+            sort = tuple(self._convert_sort(sort))
+            query = self._query_order_by(query, sort)
         if options:
             query = query.with_entities(*options)
         return query
@@ -2688,6 +2799,12 @@ class RelationalManager(Manager):
         if query is None:
             raise ItemNotFound(self.resource, id=id)
         return self._query_filter_by_id(query, id)
+
+    def all(self, where=None, sort=None):
+        try:
+            return self._query_get_all(self.instances(where, sort))
+        except IndexError:
+            raise ItemNotFound(self.resource, where=where)
 
 
 class SQLAlchemyManager(RelationalManager):
@@ -2826,13 +2943,6 @@ class SQLAlchemyManager(RelationalManager):
         if isinstance(relationship.impl, ScalarObjectAttributeImpl):
             return relationship.has(expression)
         return relationship.any(expression)
-
-    # def _expression_for_join(self, attribute, expression):
-    #     relationship = getattr(self.model, attribute)
-    #     if not (hasattr(relationship.comparator, 'any') and hasattr(
-    #             relationship.comparator, 'has')):
-    #         return relationship.has(expression)
-    #     return relationship.any(expression)
 
     def _expression_for_condition(self, condition):
         return condition.filter.expression(condition.value)
@@ -3008,6 +3118,21 @@ class HybridNeed:  # 混合需求
 
 
 class HybridItemNeed(HybridNeed):  # HyHridItemNeed("creat","user") 创建用户的权限
+    """权限的描述
+    Need(method,value)
+    UserNeed('12345') 表示id为‘12345’的用户有的权限，yield need[1]->12345
+    RoleNeed('admin') 表示角色为admin的用户有的权限, yield need[1]->admin
+    TypeNeed('old') 表示类型为old的用户有的权限, yield need[1]->old
+    ActionNeed('start') 表示有 start 这个动作的权限，yield need[1]->start
+    ItemNeed(method,value,type)
+    ItemNeed('update',20,'user') 表示拥有更新某个实体的权限 yield need[1]->200
+
+    HybridItemNeed(method,resource,type_)
+    表示操作某个资源的权限，method 是curd等
+    调用: id 退回 UserNeed 否则退回 ItemNeed
+
+    """
+
     def __init__(self, method, resource, type_=None):
         self.method = method
         self.type = type_ or resource.meta.name
@@ -3276,6 +3401,7 @@ class PrincipalMixin:  # 鉴权插件
         return target_manager._query_get_all(query)
 
     def create(self, properties, commit=True, force=False):
+        """force供内部更新,绕过权限检查"""
         if force or self._permissions["create"].can(properties):
             return super().create(properties, commit)
         raise Forbidden()
@@ -3302,45 +3428,32 @@ def principals(manager):
 
 
 def schema_to_swag_dict(schema, tags=None, example=None):
-    flasgger_dict = {
-        'tags': tags,
-        'parameters': [],
-        'responses': {"200": {"description": "正常返回", "examples": example or {"result": "success"}}}
-    }
+    flasgger_dict = {"tags": tags, "parameters": [], "responses": {"200": {"description": "正常返回", "examples": example or {"result": "success"}}}}
     _schema = schema.get("schema", {})
     method = schema.get("method")
     href = schema.get("href")
     # Add parameters to Flasgger dict.
     if "{id}" in href:
+        parameter = {"in": "path", "name": "id", "type": "string", "required": True, "description": "the ID of the resource"}
+        flasgger_dict["parameters"].append(parameter)
+    for prop, details in _schema.get("properties", {}).items():
         parameter = {
-            'in':'path',
-            'name'       : 'id',
-            'type'       : 'string',
-            'required'   : True,
-            'description': 'the ID of the resource'
+            "name": prop,
+            "type": details.get("type", "null"),
+            "required": _schema.get("required", False) and prop in _schema.get("required", False),
+            "description": details.get("description", ""),
         }
-        flasgger_dict['parameters'].append(parameter)
-    for prop, details in _schema.get('properties',{}).items():
-        parameter = {
-            'name': prop,
-            'type': details['type'],
-            'required': _schema.get('required',False) and prop in _schema.get('required',False),
-            'description': details.get('description', '') or '\n'.join([f'{k}: {v}' for k, v in details.items() if k != 'type'])
-        }
-        if method == 'GET':
-            parameter['in'] = 'query'
-        elif method == 'POST':
-            parameter['in'] = 'formData'
+        if method == "GET":
+            parameter["in"] = "query"
+        elif method == "POST":
+            parameter["in"] = "formData"
         else:
-            parameter['in'] = 'body'
-        flasgger_dict['parameters'].append(parameter)
+            parameter["in"] = "body"
+        flasgger_dict["parameters"].append(parameter)
     # Add responses to Flasgger dict.
-    for status_code, details in _schema.get('responses', {}).items():
-        response = {
-            'description': details.get('description', ''),
-            'examples': details.get('examples', {})
-        }
-        flasgger_dict['responses'][status_code] = response
+    for status_code, details in _schema.get("responses", {}).items():
+        response = {"description": details.get("description", ""), "examples": details.get("examples", {})}
+        flasgger_dict["responses"][status_code] = response
     return flasgger_dict
 
 
@@ -3358,9 +3471,15 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
     response_json = {}
 
     rel = schema.get("rel")
+    method = schema.get("method")
+
     _schema = schema.get("schema", {})
 
-    if rel in ("self", "destroy") or rel.startswith("read"):
+    if method == "GET" and _schema:
+        for k, v in _schema.get("properties").items():
+            request_args.append({"name": k, "type": v["type"], "required": False, "description": f"{k} {v.get('default',None)}"})
+
+    elif rel in ("self", "destroy") or rel.startswith("read"):
         request_args = [
             {
                 "name": "id",
@@ -3422,20 +3541,20 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
                 "description": "排序查询,True降序False升序",
             },
             {
-                "name": "page",
+                "name": PAGE,
                 "type": "Integer",
                 "required": False,
                 "description": "页码,default=1",
             },
             {
-                "name": "per_page",
+                "name": PER_PAGE,
                 "type": "Integer",
                 "required": False,
                 "description": "每页展示数,default=20",
             },
         ]
     elif rel.startswith("create"):
-        for k, v in _schema["properties"].items():
+        for k, v in _schema.get("properties", {}).items():
             field = resource.schema.fields.get(k, None)
             type = ""
             if field:
@@ -3459,17 +3578,27 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
                 "type": type,
                 "description": description,
                 "required": True,
-                "value": field.faker(),
+                "value": field.faker() if field else None,
             }
             request_json.append(one)
 
-    if route.response_schema:
+    if rel in ("create", "update", "destory"):
+        response_json = '{"result": "success"}'
+        response_args = [
+            {
+                "name": "result",
+                "value": "success",
+                "type": "String",
+                "description": "是否成功",
+                "required": True,
+            }
+        ]
+    elif route.response_schema and not isinstance(route.response_schema, String):
         data = route.response_schema.bind(resource).faker()  # stupid bug 使用Inline时要重新绑定资源
         if isinstance(data, list):
             xxx = data[0]
         else:
             xxx = data
-
         for k, v in xxx.items():
             field = resource.schema.fields.get(k, None)
             type = "String"
@@ -3517,14 +3646,14 @@ def schema_to_doc_dict(schema, route, tags=None, resource=None):
 
     dct = {
         "title": route.description or title,
-        "href": schema["href"],
+        "url": schema["href"],
         "content_type": "text/plain" if schema["method"] == "GET" else "application/json",
         "method": schema["method"],
         "description": route.description or title,
         "request_args": request_args,
         "request_json": request_json,
         "response_args": response_args,
-        "response_example": response_json,
+        "response_json": response_json,
     }
     return dct
 
@@ -3570,7 +3699,6 @@ class Api:
         )
         for route, resource, view_func, endpoint, methods, relation in self.views:
             rule = route.rule_factory(resource)
-            # print(route, resource, view_func, endpoint, methods, relation)
             if app.config["RESTONE_DECORATE_SCHEMA_ENDPOINTS"]:
                 self._register_swag_view(app, route, resource, view_func)
 
@@ -3591,8 +3719,8 @@ class Api:
             tags = [resource.meta.title or resource.meta.name]
             if schema["rel"] != "describedBy":
                 swag_from(schema_to_swag_dict(schema, tags))(view_func)
-                dct = schema_to_doc_dict(schema, route, tags, resource)
-                self.api_doc_list.append(dct)
+                # dct = schema_to_doc_dict(schema, route, tags, resource)
+                # self.api_doc_list.append(dct)
 
     def _register_view(self, app, rule, view_func, endpoint, methods, relation):
         decorate_view_func = relation != "describedBy" or app.config["RESTONE_DECORATE_SCHEMA_ENDPOINTS"]
@@ -3690,6 +3818,7 @@ class Api:
 class fields:  # noqa
     Raw = BaseField
     Any = Any
+    AnyOf = AnyOf
     String = String
     UUID = UUID
     Path = Path
@@ -3698,7 +3827,7 @@ class fields:  # noqa
     Date = Date
     DateTime = DateTime
     DateString = DateString
-    DateTimeString = DateString
+    DateTimeString = DateTimeString
     Boolean = Boolean
     Integer = Integer
     Number = Number

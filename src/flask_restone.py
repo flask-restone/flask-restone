@@ -1232,7 +1232,7 @@ class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新 todo 设置
     这样可以在同一个 Schema 中多次使用同一个定义，或者在不同的 Schema 中使用相同的定义。
     """
 
-    def __init__(self, resource, patchable=True, **kwargs):
+    def __init__(self, resource, patchable=False, **kwargs):
         self.target_reference = ResourceReference(resource)
         self.patchable = patchable
 
@@ -2165,8 +2165,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
 
                 def create_relation_instance(resource, item, properties):  # 一对一
                     target_item = self.target.manager.create(properties)
-                    resource.manager.relation_add(item, self.attribute, self.target, target_item)
-                    resource.manager.commit()
+                    resource.manager.update(item, {self.attribute:self.target})
                     return target_item
 
                 yield relations_route.for_method(

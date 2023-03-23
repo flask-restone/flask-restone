@@ -14,7 +14,7 @@ from operator import attrgetter, itemgetter
 from types import MethodType
 
 import exrex
-from docxtpl import DocxTemplate
+
 from faker import Faker
 from flasgger import swag_from
 from flask import _app_ctx_stack, _request_ctx_stack
@@ -679,8 +679,9 @@ class String(BaseField):
         if format and hasattr(_faker, format):
             return getattr(_faker, format)()
 
-        max_length = self.response.get("maxLength", 32)
-        return f"test-{self.description}"
+        min_length = self.response.get("minLength", 6)
+        max_length = self.response.get("maxLength", 6)
+        return "x"*random.randint(min_length,max_length)
 
 
 class UUID(String):
@@ -739,26 +740,23 @@ class Date(BaseField):
             "object": lambda value: date.fromtimestamp(value["$date"] * 86400),
         }.get(self.type)
         return converter(value)
+    
+    def faker(self):
+        date = _faker.date_time()
+        return self.formatter(date)
 
 
-class DateTime(BaseField):
+class DateTime(Date):
     TYPE_MAPPING = {
         "string": {"type": "string", "format": "date-time"},
         "integer": {"type": "integer"},
         "number": {"type": "number"},
         "object": {
             "type": "object",
-            "properties": {"$datetime": {"type": "integer"}},
+            "properties": {"$date": {"type": "integer"}},
             "additionalProperties": False,
         },
     }
-
-    def __init__(self, type="string", **kwargs):
-        self.type = type
-        schema = self.TYPE_MAPPING.get(type)
-        if not schema:
-            raise ValueError(f"Invalid type '{type}'")
-        super().__init__(schema, **kwargs)
 
     def formatter(self, value):
         if value.tzinfo is None:
@@ -776,13 +774,9 @@ class DateTime(BaseField):
             "string": lambda value: datetime.fromisoformat(value),
             "integer": lambda value: datetime.fromtimestamp(value, timezone.utc),
             "number": lambda value: datetime.fromtimestamp(value, timezone.utc),
-            "object": lambda value: datetime.fromtimestamp(value["$datetime"], timezone.utc),
+            "object": lambda value: datetime.fromtimestamp(value["$date"], timezone.utc),
         }.get(self.type)
         return converter(value)
-
-    def faker(self):
-        date = _faker.date_time()
-        return self.formatter(date)
 
 
 class Boolean(BaseField):
@@ -814,9 +808,6 @@ class Integer(BaseField):
         minimum = self.response.get("minimum", 1)
         maximum = self.response.get("maximum", 100)
         return random.randint(minimum, maximum)
-
-
-
 
 
 class Number(BaseField):
@@ -854,18 +845,6 @@ class Number(BaseField):
         return random.randint(minimum * 100, maximum * 100) / 100
 
 
-def _field_from_object(parent, schema_cls_or_obj):  # 从对象获取字段
-    if isinstance(schema_cls_or_obj, type):
-        container = schema_cls_or_obj()  # 类的实例
-    else:
-        container = schema_cls_or_obj  # 实例
-    if not isinstance(container, Schema):  # 实例不是格式类
-        raise RuntimeError(f"{parent} expected BaseField or Schema, but got {container.__class__.__name__}")
-    if not isinstance(container, BaseField):  # 实例不是Raw类是Schema类
-        container = BaseField(container)
-    return container
-
-
 class AnyOf(BaseField):
     """anyOf关键字表示一个模式可以匹配多个模式中的任意一个，
     即任意一个模式匹配成功，则整个模式匹配成功。
@@ -880,9 +859,19 @@ class AnyOf(BaseField):
         super().__init__({"anyOf": [subschema.response for subschema in self.subschemas]}, **kwargs)
 
     def faker(self):
-        faker_funcs = [subschema.faker for subschema in self.subschemas]
-        faker_func = random.choice(faker_funcs)
-        return faker_func()
+        return random.choice(self.subschemas).faker()
+
+
+def _field_from_object(parent, schema_cls_or_obj):  # 从对象获取字段
+    if isinstance(schema_cls_or_obj, type):
+        container = schema_cls_or_obj()  # 类的实例
+    else:
+        container = schema_cls_or_obj  # 实例
+    if not isinstance(container, Schema):  # 实例不是格式类
+        raise RuntimeError(f"{parent} expected BaseField or Schema, but got {container.__class__.__name__}")
+    if not isinstance(container, BaseField):  # 实例不是BaseField 类,是json
+        container = BaseField(container)
+    return container
 
 
 class Array(BaseField, ResourceMixin):
@@ -1005,7 +994,7 @@ class Object(BaseField, ResourceMixin):
         super().__init__(schema, **kwargs)
 
     def bind(self, resource):
-        # 是不是说满足某个模式的字段都用一个字段类，比如 {{".*_time":DateTime}}
+        # 满足某个模式的字段都用一个字段类，比如 {{".*_time":DateTime}}
         if self.properties:
             self.properties = {key: _bind_schema(value, resource) for (key, value) in self.properties.items()}
         if self.pattern_props:
@@ -1377,8 +1366,8 @@ class BaseFilter(Schema):
             return Condition(self.attribute, self, self.field.convert(instance))
         return Condition(self.attribute, self, self.field.convert(instance[f"${self.name}"]))
 
-    def schema(self):
-        schema = self.field.request  # 过滤器只能针对请求模式，过滤器的模式就是所过滤字段的请求模式
+    def schema(self): # 过滤器只能针对请求模式，过滤器的模式就是所过滤字段的请求模式
+        schema = self.field.request
         if schema:
             _schema = {k: v for k, v in schema.items() if k != "readOnly"}
         else:
@@ -1815,10 +1804,10 @@ class PropertyKey(Key):
 
     @cached_property
     def _field_filter(self):
-        return self.resource.manager.filters[self.property][None]
+        return self.resource.manager.filters[self.property]["$eq"]
 
     def convert(self, value, **kwargs):
-        return self.resource.manager.first(where=[Condition(self.property, self._field_filter, value)])
+        return self.resource.manager.first(where={self.property:value})
 
 
 class PropertiesKey(Key):
@@ -1846,7 +1835,7 @@ class PropertiesKey(Key):
         return self.resource.manager.filters
 
     def convert(self, value, **kwargs):
-        return self.resource.manager.first(where=[Condition(property, self._field_filters[property][None], value[i]) for (i, property) in enumerate(self.properties)])
+        return self.resource.manager.first(where={property: value[i] for (i, property) in enumerate(self.properties)})
 
 
 class IDKey(Key):
@@ -2540,15 +2529,12 @@ class Manager:
                 filter_name = filter_name[1:]
                 for filter in field_filters.values():
                     if filter_name == filter.name:
-                        return filter.convert(
-                            value,
-                        )
+                        return filter.convert(value)
         filter = field_filters["eq"]  # 没有名为None的了
-        return filter.convert(
-            value,
-        )
+        return filter.convert(value)
 
     def _convert_filters(self, where):  # 将转换where的步骤移到manager中，使得在查询之前可以修改where
+        
         for name, value in where.items():
             if "." in name:
                 # Todo 这里初步实现了联合查询，只支持一个级别的外键，即只有1个.号
@@ -2564,6 +2550,8 @@ class Manager:
                     or_expressions.append(self._expression_for_condition(condition))
                 yield self._or_expression(or_expressions)
             else:
+                # if not isinstance(value,dict):
+                #     value = {"$eq":value}
                 try:
                     yield self.convert_filters(value, self.filters[name])  # Condition条件实力
                 except KeyError:
@@ -3459,207 +3447,6 @@ def schema_to_swag_dict(schema, tags=None, example=None):
     return flasgger_dict
 
 
-def schema_to_doc_dict(schema, route, tags=None, resource=None):
-    HTTP_VERBS_CN = {
-        "create": "创建{}",
-        "destroy": "删除{}",
-        "instances": "查询{}列表",
-        "self": "查询{}详情",
-        "update": "修改{}",
-    }
-    request_json = []
-    request_args = []
-    response_args = []
-    response_json = {}
-
-    rel = schema.get("rel")
-    method = schema.get("method")
-
-    _schema = schema.get("schema", {})
-
-    if method == "GET" and _schema:
-        for k, v in _schema.get("properties").items():
-            request_args.append({"name": k, "type": v["type"], "required": False, "description": f"{k} {v.get('default',None)}"})
-
-    elif rel in ("self", "destroy") or rel.startswith("read"):
-        request_args = [
-            {
-                "name": "id",
-                "type": "String",
-                "required": True,
-                "description": f"{resource.meta.name}-id",
-            }
-        ]
-
-    elif rel.startswith("update"):
-        request_args = [
-            {
-                "name": "id",
-                "type": "string",
-                "required": True,
-                "description": f"{resource.meta.name}-id",
-            }
-        ]
-        for k, v in _schema["properties"].items():
-            field = resource.schema.fields.get(k, None)
-            type = ""
-            if field:
-                type = "String"
-                if isinstance(field, (Date, DateTime)):
-                    type = "Datetime"
-                elif isinstance(field, Integer):
-                    type = "Integer"
-            description = ""
-            if field:
-                description = field.description
-
-            if not description:
-                model_field = getattr(resource.meta.model, k, None)
-                if model_field:
-                    description = model_field.info
-            one = {
-                "name": k,
-                "type": type,
-                "description": description,
-                "required": True,
-                "value": field.faker(),
-            }
-            request_json.append(one)
-
-    elif rel == "instances":
-        request_args = [
-            {
-                "name": "where",
-                "value": "{'type':'online','status':'DRAFT'}",
-                "type": "json",
-                "required": False,
-                "description": "过滤查询",
-            },
-            {
-                "name": "sort",
-                "value": "{'name':True,'status':False}",
-                "type": "json",
-                "required": False,
-                "description": "排序查询,True降序False升序",
-            },
-            {
-                "name": PAGE,
-                "type": "Integer",
-                "required": False,
-                "description": "页码,default=1",
-            },
-            {
-                "name": PER_PAGE,
-                "type": "Integer",
-                "required": False,
-                "description": "每页展示数,default=20",
-            },
-        ]
-    elif rel.startswith("create"):
-        for k, v in _schema.get("properties", {}).items():
-            field = resource.schema.fields.get(k, None)
-            type = ""
-            if field:
-                type = "String"
-                if isinstance(field, (Date, DateTime)):
-                    type = "Datetime"
-                elif isinstance(field, Integer):
-                    type = "Integer"
-
-            description = ""
-            if field:
-                description = field.description
-
-            if not description:
-                model_field = getattr(resource.meta.model, k, None)
-                if model_field:
-                    description = model_field.info
-
-            one = {
-                "name": k,
-                "type": type,
-                "description": description,
-                "required": True,
-                "value": field.faker() if field else None,
-            }
-            request_json.append(one)
-
-    if rel in ("create", "update", "destory"):
-        response_json = '{"result": "success"}'
-        response_args = [
-            {
-                "name": "result",
-                "value": "success",
-                "type": "String",
-                "description": "是否成功",
-                "required": True,
-            }
-        ]
-    elif route.response_schema and not isinstance(route.response_schema, String):
-        data = route.response_schema.bind(resource).faker()  # stupid bug 使用Inline时要重新绑定资源
-        if isinstance(data, list):
-            xxx = data[0]
-        else:
-            xxx = data
-        for k, v in xxx.items():
-            field = resource.schema.fields.get(k, None)
-            type = "String"
-            if isinstance(field, (Date, DateTime)):
-                type = "Datetime"
-            elif isinstance(field, Integer):
-                type = "Integer"
-
-            description = ""
-            if field:
-                description = field.description
-            if not description:
-                model_field = getattr(resource.meta.model, k, None)
-                if model_field:
-                    description = model_field.info
-            one = {
-                "name": k,
-                "value": v,
-                "type": type,
-                "description": description,
-                "required": True,
-            }
-            response_args.append(one)
-        settings = {}
-        settings.setdefault("indent", 4)
-        settings.setdefault("sort_keys", True)
-        response_json = json.dumps(data, **settings)
-
-        def _sort_key(x):
-            if "time" in x["name"]:
-                return 10, x["name"]
-            if "_" in x["name"]:
-                return 9, x["name"]
-            if "$" in x["name"]:
-                return 0, x["name"]
-            return 1, x["name"]
-
-        response_args.sort(key=_sort_key)
-
-    rel_cn = HTTP_VERBS_CN.get(rel, None)
-    if rel_cn:
-        title = rel_cn.format(tags[0])
-    else:
-        title = rel
-
-    dct = {
-        "title": route.description or title,
-        "url": schema["href"],
-        "content_type": "text/plain" if schema["method"] == "GET" else "application/json",
-        "method": schema["method"],
-        "description": route.description or title,
-        "request_args": request_args,
-        "request_json": request_json,
-        "response_args": response_args,
-        "response_json": response_json,
-    }
-    return dct
-
-
 def _make_response(data, code, headers=None):
     settings = {}
     if current_app.debug:
@@ -3692,7 +3479,6 @@ class Api:
         self.resources = {}
         self.views = []
         self.default_manager = default_manager or SQLAlchemyManager
-        self.api_doc_list = []
         if app is not None:
             self.init_app(app)
 
@@ -3720,12 +3506,6 @@ class Api:
         app.handle_exception = partial(self._exception_handler, app.handle_exception)
         app.handle_user_exception = partial(self._exception_handler, app.handle_user_exception)
 
-    def generate_docx(self, template, filename):
-        doc = DocxTemplate(template)
-        dct = {"api_list": self.api_doc_list}
-        doc.render(dct)
-        doc.save(filename)
-
     def _register_swag_view(self, app, route, resource, view_func):
         """注册到swager"""
         with app.app_context():
@@ -3733,8 +3513,6 @@ class Api:
             tags = [resource.meta.title or resource.meta.name]
             if schema["rel"] != "describedBy":
                 swag_from(schema_to_swag_dict(schema, tags))(view_func)
-                # dct = schema_to_doc_dict(schema, route, tags, resource)
-                # self.api_doc_list.append(dct)
 
     def _register_view(self, app, rule, view_func, endpoint, methods, relation):
         decorate_view_func = relation != "describedBy" or app.config["RESTONE_DECORATE_SCHEMA_ENDPOINTS"]

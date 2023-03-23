@@ -1944,7 +1944,9 @@ class Route:
         self.method = method  # get/post
         self.attribute = attribute  # 属性？
         self.title = title  # 标题？网页标题
-        self.description = description  # 网页描述？
+        if not description and view_func.__doc__: # 从docstring中获取description
+            description = view_func.__doc__.splitlines()[0].strip()
+        self.description = description
         self.view_func = view_func  # 视图函数
         self.format_response = format_response  # 是否格式化响应
         self.success_code = success_code  # 状态码

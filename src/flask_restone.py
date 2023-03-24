@@ -2489,7 +2489,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         postgres_full_text_index = None
         cache = False  # 缓存
         key_converters = (RefKey(), IDKey())
-        datetime_formater = DateTime
+        datetime_formatter = DateTime
         natural_key = None
 
 

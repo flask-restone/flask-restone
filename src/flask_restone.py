@@ -63,10 +63,10 @@ __all__ = [
     "after_update",
     "before_delete",
     "after_delete",
-    "before_add_to_relation",
-    "after_add_to_relation",
-    "before_remove_from_relation",
-    "after_remove_from_relation",
+    "before_relate",
+    "after_relate",
+    "before_unrelate",
+    "after_unrelate",
     "Pagination",
 ]
 
@@ -85,10 +85,10 @@ before_update = _signals.signal("before-update")
 after_update = _signals.signal("after-update")
 before_delete = _signals.signal("before-delete")
 after_delete = _signals.signal("after-delete")
-before_add_to_relation = _signals.signal("before-add-to-relation")
-after_add_to_relation = _signals.signal("after-add-to-relation")
-before_remove_from_relation = _signals.signal("before-remove-from-relation")
-after_remove_from_relation = _signals.signal("after-remove-from-relation")
+before_relate = _signals.signal("before-relate")
+after_relate = _signals.signal("after-relate")
+before_unrelate = _signals.signal("before-unrelate")
+after_unrelate = _signals.signal("after-unrelate")
 
 
 # ---------------------------异常----------------------
@@ -3073,15 +3073,15 @@ class SQLAlchemyManager(RelationalManager):
         return self._query_get_all(query)
 
     def relation_add(self, item, attribute, target_resource, target_item):
-        before_add_to_relation.send(self.resource, item=item, attribute=attribute, child=target_item)  # 增加关联对象之前
+        before_relate.send(self.resource, item=item, attribute=attribute, child=target_item)  # 增加关联对象之前
         getattr(item, attribute).append(target_item)  # 一对多
-        after_add_to_relation.send(self.resource, item=item, attribute=attribute, child=target_item)
+        after_relate.send(self.resource, item=item, attribute=attribute, child=target_item)
 
     def relation_remove(self, item, attribute, target_resource, target_item):
-        before_remove_from_relation.send(self.resource, item=item, attribute=attribute, child=target_item)
+        before_unrelate.send(self.resource, item=item, attribute=attribute, child=target_item)
         try:
             getattr(item, attribute).remove(target_item)
-            after_remove_from_relation.send(self.resource, item=item, attribute=attribute, child=target_item)
+            after_unrelate.send(self.resource, item=item, attribute=attribute, child=target_item)
         except ValueError:
             pass  # if the relation does not exist, do nothing
 

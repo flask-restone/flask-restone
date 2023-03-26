@@ -3522,7 +3522,6 @@ class Api:
         """注册到swager"""
         with app.app_context():
             schema = route.schema_factory(resource)
-            print(schema)
             tags = [resource.meta.title or resource.meta.name]
             if schema["rel"] != "describedBy":
                 swag_from(schema_to_swag_dict(schema, tags))(view_func)

@@ -95,7 +95,6 @@ after_unrelate = _signals.signal("after-unrelate")
 class RestoneException(Exception):
     status_code = 500
 
-    @property
     def as_dict(self):
         if self.args:
             message = str(self)
@@ -104,7 +103,7 @@ class RestoneException(Exception):
         return dict(status=self.status_code, message=message)
 
     def get_response(self):
-        response = jsonify(self.as_dict)
+        response = jsonify(self.as_dict())
         response.status_code = self.status_code
         return response
 
@@ -117,9 +116,8 @@ class ItemNotFound(RestoneException):
         self.id = id
         self.where = where
 
-    @property
     def as_dict(self):
-        dct = super().as_dict
+        dct = super().as_dict()
         if self.id is not None:
             dct["item"] = {"$type": self.resource.meta.name, "$id": self.id}
         else:
@@ -158,9 +156,8 @@ class ValidationError(RestoneException):
                 error_data["message"] = error.message
             yield error_data
 
-    @property
     def as_dict(self):
-        dct = super().as_dict
+        dct = super().as_dict()
         dct["errors"] = list(self._format_errors())
         return dct
 
@@ -178,9 +175,8 @@ class BackendConflict(RestoneException):
     def __init__(self, **kwargs):
         self.data = kwargs
 
-    @property
     def as_dict(self):
-        dct = super().as_dict
+        dct = super().as_dict()
         dct.update(self.data)
         return dct
 
@@ -2893,7 +2889,9 @@ class SQLAlchemyManager(RelationalManager):
             field_class = self._get_field_from_python_type(python_type)
 
         kwargs["nullable"] = column.nullable
-
+        if column.info and not kwargs.get("description"):
+            kwargs["description"] = column.info
+        
         if column.default is not None:
             if column.default.is_sequence:
                 pass

@@ -2079,10 +2079,10 @@ class Route:
 
         return view
 
-
-for method in HTTP_METHODS:
-    setattr(Route, method, _route_decorator(method))
-    setattr(Route, method.lower(), getattr(Route, method))
+    for method in HTTP_METHODS:
+        locals()[method] = _route_decorator(method)
+        locals()[method.lower()] = locals()[method]
+    # 使用locals 在当前作用域来设置批量类方法
 
 
 class ItemRoute(Route):  # 单个记录
@@ -2106,11 +2106,6 @@ class ItemRoute(Route):  # 单个记录
             return original_view(item, *args, **kwargs)
 
         return view
-
-
-for method in HTTP_METHODS:
-    setattr(ItemRoute, method, _route_decorator(method))
-    setattr(ItemRoute, method.lower(), getattr(ItemRoute, method))
 
 
 class RouteSet:

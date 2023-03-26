@@ -125,7 +125,7 @@ class ItemNotFound(RestoneException):
         else:
             dct["item"] = {
                 "$type": self.resource.meta.name,
-                "$where": {cond.attribute: {f"${cond.filter.name}": cond.value} if cond.filter.name is not None else cond.value for cond in self.where} if self.where else None,
+                "$where":self.where,
             }
         return dct
 
@@ -3420,34 +3420,46 @@ def principals(manager):
 
 
 def schema_to_swag_dict(schema, tags=None, example=None):
-    flasgger_dict = {"tags": tags, "parameters": [], "responses": {"200": {"description": "正常返回", "examples": example or {"result": "success"}}}}
+    flasgger_dict = {"tags": tags or [], "parameters": [], "responses": {"200": {"description": "正常返回"}}}
     _schema = schema.get("schema", {})
-    method = schema.get("method")
-    href = schema.get("href")
+
+    method = schema.get("method", "")
+    href = schema.get("href", "")
     # Add parameters to Flasgger dict.
     if "{id}" in href:
         parameter = {"in": "path", "name": "id", "type": "string", "required": True, "description": "the ID of the resource"}
         flasgger_dict["parameters"].append(parameter)
-    for prop, details in _schema.get("properties", {}).items():
-        parameter = {
-            "name": prop,
-            "type": details.get("type", "null"),
-            "required": _schema.get("required", False) and prop in _schema.get("required", False),
-            "description": details.get("description", ""),
-        }
-        if method == "GET":
-            parameter["in"] = "query"
-        elif method == "POST":
-            parameter["in"] = "formData"
-        else:
-            parameter["in"] = "body"
-        flasgger_dict["parameters"].append(parameter)
+    
+    if method == "GET":
+        required_props = _schema.get("required", []) if "required" in _schema else []
+        for prop, details in _schema.get("properties", {}).items():
+            parameter = {
+                "name": prop,
+                "in":"query",
+                "type": details.get("type", "string") if details.get("type") != "null" else "string",
+                "required": prop in required_props,
+                "description": details.get("description", ""),
+            }
+            if prop=="where":
+                parameter["description"] = "过滤条件"
+            elif prop == "sort":
+                parameter["description"] = "排序条件"
+            elif prop == PAGE:
+                parameter["description"] = "分页页码"
+            elif prop == PER_PAGE:
+                parameter["description"] = "每页数量"
+            flasgger_dict["parameters"].append(parameter)
+    else:
+        flasgger_dict["parameters"].append({"in": "body", "name": "Item", "schema":_schema})
     # Add responses to Flasgger dict.
     for status_code, details in _schema.get("responses", {}).items():
-        response = {"description": details.get("description", ""), "examples": details.get("examples", {})}
+        response = {"description": details.get("description", "")}
+        if "examples" in details:
+            response["examples"] = details["examples"]
+        elif example:
+            response["examples"] = example
         flasgger_dict["responses"][status_code] = response
     return flasgger_dict
-
 
 def _make_response(data, code, headers=None):
     settings = {}
@@ -3512,6 +3524,7 @@ class Api:
         """注册到swager"""
         with app.app_context():
             schema = route.schema_factory(resource)
+            print(schema)
             tags = [resource.meta.title or resource.meta.name]
             if schema["rel"] != "describedBy":
                 swag_from(schema_to_swag_dict(schema, tags))(view_func)
@@ -3561,7 +3574,6 @@ class Api:
 
     def add_route(self, route, resource, endpoint=None, decorator=None):
         endpoint = endpoint or "_".join((resource.meta.name, route.relation))
-        # services_status
         methods = [route.method]
         rule = route.rule_factory(resource)
         view_func = route.view_factory(endpoint, resource)

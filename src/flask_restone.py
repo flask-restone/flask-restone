@@ -2148,7 +2148,7 @@ class RouteSet:
 
 
 class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
-    # 用法 author = Relation("UserResource",backref="book",attribute='author')
+
     def __init__(self, resource, uselist=True, io="rw", attribute=None):
         self.reference = ResourceReference(resource)  # 找到关联的资源类
         self.attribute = attribute  # 属性名
@@ -2158,7 +2158,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
     @cached_property
     def target(self):
         return self.reference.resolve(self.resource)  # 目标类
-
+        
     def routes(self):
         io = self.io
         rule = f"/{_(self.attribute)}"  # /author
@@ -2167,7 +2167,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
         if not self.uselist:
             if "r" in io:
 
-                def relation_instance(resource, item):  # 一对一
+                def relation_instance(resource, item):  # noqa
                     return getattr(item, self.attribute)
 
                 yield relations_route.for_method(
@@ -2176,7 +2176,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     rel=camel_case(f"read_{self.attribute}"),
                     response_schema=Inline(self.target),
                 )
-            if "c" in io:
+            if "w" in io or"c" in io:
 
                 def create_relation_instance(resource, item, properties):  # 一对一
                     target_item = self.target.manager.create(properties)
@@ -2190,9 +2190,9 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     response_schema=ToOne(self.target),
                     schema=Inline(self.target),
                 )
-            if "u" in io:
+            if "w" in io or "u" in io:
 
-                def update_relation_instance(resource, item, changes):
+                def update_relation_instance(resource, item, changes): # noqa
                     target_item = getattr(item, self.attribute)
                     target_item = self.target.manager.update(target_item, changes)
                     return target_item

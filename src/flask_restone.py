@@ -1752,31 +1752,6 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         return sort, where
 
 
-class Pagination:
-    def __init__(self, items, page, per_page, total):
-        self.items = items
-        self.page = page
-        self.per_page = per_page
-        self.total = total
-
-    @property
-    def pages(self):
-        return max(1, self.total // self.per_page + bool(self.total % self.per_page))
-
-    @property
-    def has_prev(self):
-        return self.page > 1
-
-    @property
-    def has_next(self):
-        return self.page < self.pages
-
-    @classmethod
-    def from_list(cls, items, page, per_page):
-        start = per_page * (page - 1)
-        return Pagination(items[start : start + per_page], page, per_page, len(items))
-
-
 class Key(Schema, ResourceMixin):
     def matcher_type(self):
         type_ = self.response["type"]
@@ -2271,7 +2246,7 @@ class AttrRoute(RouteSet):  # 单个记录的属性路由
 
         if "r" in io:  # 读属性的路由
 
-            def read_attribute(resource, item): # noqa
+            def read_attribute(resource, item):  # noqa
                 return get_value(attribute, item, field.default)
 
             yield route.for_method(
@@ -2507,6 +2482,31 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         key_converters = (RefKey(), IDKey())
         datetime_formatter = DateTime
         natural_key = None
+
+
+class Pagination:
+    def __init__(self, items, page, per_page, total):
+        self.items = items
+        self.page = page
+        self.per_page = per_page
+        self.total = total
+
+    @property
+    def pages(self):
+        return max(1, self.total // self.per_page + bool(self.total % self.per_page))
+
+    @property
+    def has_prev(self):
+        return self.page > 1
+
+    @property
+    def has_next(self):
+        return self.page < self.pages
+
+    @classmethod
+    def from_list(cls, items, page, per_page):
+        start = per_page * (page - 1)
+        return Pagination(items[start : start + per_page], page, per_page, len(items))
 
 
 # 数据管理器，接入数据一端，可以是不同的数据库，只要实现了相同的方法
@@ -3252,7 +3252,8 @@ class HybridPermission(Permission):
 
 
 class PrincipalMixin:  # 鉴权插件
-    PERMISSION_GRANTED_STRINGS = ("yes", "everybody", "anybody", "everyone", "anyone")
+    
+    PERMISSION_GRANTED_STRINGS = ("yes", "everyone", "anyone")
     PERMISSION_DENIED_STRINGS = ("no", "nobody", "none")
     PERMISSION_DEFAULTS = (
         ("read", "yes"),  #

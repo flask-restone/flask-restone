@@ -2149,10 +2149,9 @@ class RouteSet:
 
 class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
     # 用法 author = Relation("UserResource",backref="book",attribute='author')
-    def __init__(self, resource, backref=None, uselist=True, io="rw", attribute=None):
+    def __init__(self, resource, uselist=True, io="rw", attribute=None):
         self.reference = ResourceReference(resource)  # 找到关联的资源类
         self.attribute = attribute  # 属性名
-        self.backref = backref  # 反向引用名
         self.io = io
         self.uselist = uselist
 

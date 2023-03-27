@@ -859,11 +859,11 @@ class AnyOf(BaseField):
         return random.choice(self.subschemas).faker()
 
 
-def _field_from_object(parent, schema_cls_or_obj):  # 从对象获取字段
-    if isinstance(schema_cls_or_obj, type):
-        container = schema_cls_or_obj()  # 类的实例
+def _field_from_object(parent, schema):  # 从对象获取字段
+    if isinstance(schema, type):
+        container = schema()  # 类的实例
     else:
-        container = schema_cls_or_obj  # 实例
+        container = schema  # 实例
     if not isinstance(container, Schema):  # 实例不是格式类
         raise RuntimeError(f"{parent} expected BaseField or Schema, but got {container.__class__.__name__}")
     if not isinstance(container, BaseField):  # 实例不是BaseField 类,是json
@@ -872,8 +872,8 @@ def _field_from_object(parent, schema_cls_or_obj):  # 从对象获取字段
 
 
 class Array(BaseField, ResourceMixin):
-    def __init__(self, schema_cls_or_obj, min_items=None, max_items=None, unique=None, **kwargs):
-        self.container = container = _field_from_object(self, schema_cls_or_obj)
+    def __init__(self, schema, min_items=None, max_items=None, unique=None, **kwargs):
+        self.container = container = _field_from_object(self, schema)
         schema_properties = [("type", "array")]
         schema_properties += [
             (k, v)
@@ -1079,9 +1079,9 @@ class AttributeMapped(Object):
                          }, o.response)
     """
 
-    def __init__(self, schema_cls_or_obj, mapping_attribute=None, **kwargs):
+    def __init__(self, schema, mapping_attribute=None, **kwargs):
         self.mapping_attribute = mapping_attribute
-        super().__init__(schema_cls_or_obj, **kwargs)
+        super().__init__(schema, **kwargs)
 
     def _set_mapping_attribute(self, obj, value):
         if isinstance(obj, dict):
@@ -2257,8 +2257,8 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
 
 
 class AttrRoute(RouteSet):  # 单个记录的属性路由
-    def __init__(self, schema_cls_or_obj, io=None, attribute=None, description=None):
-        self.field = _field_from_object(AttrRoute, schema_cls_or_obj)
+    def __init__(self, schema, io=None, attribute=None, description=None):
+        self.field = _field_from_object(AttrRoute, schema)
         self.attribute = attribute
         self.io = io
         self.description = description
@@ -2271,16 +2271,8 @@ class AttrRoute(RouteSet):  # 单个记录的属性路由
 
         if "r" in io:  # 读属性的路由
 
-            def read_attribute(resource, item):
-                if hasattr(resource, f"before_read_{attribute}"):  # 直接调用source的钩子
-                    getattr(resource, f"before_read_{attribute}")(item)  # 也可以直接改为信号发射
-
-                resp = get_value(attribute, item, field.default)
-
-                if hasattr(resource, f"after_read_{attribute}"):  # 直接调用source的钩子
-                    getattr(resource, f"after_read_{attribute}")(item)
-
-                return resp
+            def read_attribute(resource, item): # noqa
+                return get_value(attribute, item, field.default)
 
             yield route.for_method(
                 "GET",

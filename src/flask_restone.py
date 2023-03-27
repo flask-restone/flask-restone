@@ -44,7 +44,7 @@ __all__ = [
     "Route",
     "Api",
     "ItemRoute",
-    "ItemAttributeRoute",
+    "AttrRoute",
     "principals",
     "SQLAlchemyManager",
     "RestoneException",
@@ -2257,9 +2257,9 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                 yield relation_route.for_method("DELETE", relation_remove, rel=camel_case(f"remove_{self.attribute}"))
 
 
-class ItemAttributeRoute(RouteSet):  # 单个记录的属性路由
+class AttrRoute(RouteSet):  # 单个记录的属性路由
     def __init__(self, schema_cls_or_obj, io=None, attribute=None, description=None):
-        self.field = _field_from_object(ItemAttributeRoute, schema_cls_or_obj)
+        self.field = _field_from_object(AttrRoute, schema_cls_or_obj)
         self.attribute = attribute
         self.io = io
         self.description = description
@@ -3631,7 +3631,7 @@ class Api:
         for name, rset in inspect.getmembers(resource, lambda m: isinstance(m, RouteSet)):
             if rset.attribute is None:
                 rset.attribute = name
-                # 没有属性就用自己名字做属性 如 status = ItemAttributeRoute(field_cls_or_instance,io='ru')
+                # 没有属性就用自己名字做属性 如 status = AttrRoute(field_cls_or_instance,io='ru')
             for i, route in enumerate(rset.routes()):
                 if route.attribute is None:
                     route.attribute = f"{rset.attribute}_{i}"

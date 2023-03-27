@@ -22,8 +22,7 @@ from flask import current_app, g, json, jsonify, make_response, request
 from flask.signals import Namespace
 from flask_principal import ItemNeed, Permission, RoleNeed, UserNeed
 from flask_sqlalchemy import Pagination as SAPagination
-from jsonschema import (Draft4Validator, FormatChecker,
-                        ValidationError as _ValidationError)
+from jsonschema import Draft4Validator, FormatChecker, ValidationError as _ValidationError
 from sqlalchemy import String as String_, and_, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
@@ -123,7 +122,7 @@ class ItemNotFound(RestoneException):
         else:
             dct["item"] = {
                 "$type": self.resource.meta.name,
-                "$where":self.where,
+                "$where": self.where,
             }
         return dct
 
@@ -679,7 +678,7 @@ class String(BaseField):
             return default
         min_length = self.response.get("minLength", 6)
         max_length = self.response.get("maxLength", 6)
-        return "x"*random.randint(min_length,max_length)
+        return "x" * random.randint(min_length, max_length)
 
 
 class UUID(String):
@@ -738,7 +737,7 @@ class Date(BaseField):
             "object": lambda value: date.fromtimestamp(value["$date"] * 86400),
         }.get(self.type)
         return converter(value)
-    
+
     def faker(self):
         date = _faker.date_time()
         return self.formatter(date)
@@ -1342,6 +1341,7 @@ class fields:  # noqa
     List = Array
     Dict = Object
 
+
 # -------------------过滤器-------------------------------------
 class Condition:  # 属性 过滤器 值
     def __init__(self, attribute, filter, value):
@@ -1396,7 +1396,7 @@ class BaseFilter(Schema):
             return Condition(self.attribute, self, self.field.convert(instance))
         return Condition(self.attribute, self, self.field.convert(instance[f"${self.name}"]))
 
-    def schema(self): # 过滤器只能针对请求模式，过滤器的模式就是所过滤字段的请求模式
+    def schema(self):  # 过滤器只能针对请求模式，过滤器的模式就是所过滤字段的请求模式
         schema = self.field.request
         if schema:
             _schema = {k: v for k, v in schema.items() if k != "readOnly"}
@@ -1837,7 +1837,7 @@ class PropertyKey(Key):
         return self.resource.manager.filters[self.property]["$eq"]
 
     def convert(self, value, **kwargs):
-        return self.resource.manager.first(where={self.property:value})
+        return self.resource.manager.first(where={self.property: value})
 
 
 class PropertiesKey(Key):
@@ -1974,7 +1974,7 @@ class Route:
         self.method = method  # get/post
         self.attribute = attribute  # 属性？
         self.title = title  # 标题？网页标题
-        if not description and view_func.__doc__: # 从docstring中获取description
+        if not description and view_func.__doc__:  # 从docstring中获取description
             description = view_func.__doc__.splitlines()[0].strip()
         self.description = description
         self.view_func = view_func  # 视图函数
@@ -2148,7 +2148,6 @@ class RouteSet:
 
 
 class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
-
     def __init__(self, resource, uselist=True, io="rw", attribute=None):
         self.reference = ResourceReference(resource)  # 找到关联的资源类
         self.attribute = attribute  # 属性名
@@ -2158,7 +2157,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
     @cached_property
     def target(self):
         return self.reference.resolve(self.resource)  # 目标类
-        
+
     def routes(self):
         io = self.io
         rule = f"/{_(self.attribute)}"  # /author
@@ -2176,11 +2175,11 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     rel=camel_case(f"read_{self.attribute}"),
                     response_schema=Inline(self.target),
                 )
-            if "w" in io or"c" in io:
+            if "w" in io or "c" in io:
 
                 def create_relation_instance(resource, item, properties):  # 一对一
                     target_item = self.target.manager.create(properties)
-                    resource.manager.update(item, {self.attribute:self.target})
+                    resource.manager.update(item, {self.attribute: self.target})
                     return target_item
 
                 yield relations_route.for_method(
@@ -2192,7 +2191,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                 )
             if "w" in io or "u" in io:
 
-                def update_relation_instance(resource, item, changes): # noqa
+                def update_relation_instance(resource, item, changes):  # noqa
                     target_item = getattr(item, self.attribute)
                     target_item = self.target.manager.update(target_item, changes)
                     return target_item
@@ -2360,13 +2359,13 @@ class ResourceMeta(type):
         if schema:
             class_.schema = fs = FieldSet(
                 {k: f for (k, f) in schema.items() if not k.startswith("__")},
-                required_fields=meta.get("required_fields", None),
+                required_fields=meta.get("required", None),
             )
 
-            for name in meta.get("read_only_fields", ()):
+            for name in meta.get("read_only", ()):
                 if name in fs.fields:
                     fs.fields[name].io = "r"
-            for name in meta.get("write_only_fields", ()):
+            for name in meta.get("write_only", ()):
                 if name in fs.fields:
                     fs.fields[name].io = "w"
             fs.bind(class_)
@@ -2375,6 +2374,7 @@ class ResourceMeta(type):
                 add_route(routes, m, n)
             if isinstance(m, ResourceMixin):
                 m.bind(class_)
+
         if meta.exclude_routes:
             for relation in meta.exclude_routes:
                 routes.pop(relation, None)
@@ -2406,11 +2406,11 @@ class Resource(metaclass=ResourceMeta):
         name = None
         title = None
         description = None
-        required_fields = None
         exclude_routes = ()
         route_decorators = {}
-        read_only_fields = ()
-        write_only_fields = ()
+        read_only = ()
+        write_only = ()
+        required = None
 
 
 # 模型资源是专门为数据库orm设计的资源
@@ -2546,42 +2546,6 @@ class Manager:
             field_set.set("$uri", ItemUri(resource, attribute=id_attribute))
         if meta.include_type:
             field_set.set("$type", ItemType(resource))
-
-    @staticmethod
-    def convert_filters(value, field_filters):
-        if isinstance(value, dict) and len(value) == 1:
-            filter_name = next(iter(value))
-            if len(filter_name) > 1 and filter_name.startswith("$"):
-                filter_name = filter_name[1:]
-                for filter in field_filters.values():
-                    if filter_name == filter.name:
-                        return filter.convert(value)
-        filter = field_filters["eq"]  # 没有名为None的了
-        return filter.convert(value)
-
-    def _convert_filters(self, where):  # 将转换where的步骤移到manager中，使得在查询之前可以修改where
-        
-        for name, value in where.items():
-            if "." in name:
-                # Todo 这里初步实现了联合查询，只支持一个级别的外键，即只有1个.号
-                k, v = name.rsplit(".", 1)
-                target = self.resource.schema.fields[k].target
-                condition = self.convert_filters(value, target.manager.filters[v])
-                expression = target.manager._expression_for_condition(condition)
-                yield self._expression_for_join(k, expression)  # 返回表达式
-            elif name == "$like":
-                or_expressions = []
-                for field_name in self.resource.meta.get("fuzzy_fields", ()):
-                    condition = self.convert_filters({"$ci": value["$eq"]}, self.filters[field_name])
-                    or_expressions.append(self._expression_for_condition(condition))
-                yield self._or_expression(or_expressions)
-            else:
-                # if not isinstance(value,dict):
-                #     value = {"$eq":value}
-                try:
-                    yield self.convert_filters(value, self.filters[name])  # Condition条件实力
-                except KeyError:
-                    raise InvalidFilter(f"Filter <{name}> is not allowed")
 
     def _init_filter(self, filter_class, name, field, attribute):
         return filter_class(field=field, attribute=field.attribute or attribute)
@@ -2822,6 +2786,39 @@ class RelationalManager(Manager):
         except IndexError:
             raise ItemNotFound(self.resource, where=where)
 
+    @staticmethod
+    def convert_filters(value, field_filters):
+        if isinstance(value, dict) and len(value) == 1:
+            filter_name = next(iter(value))
+            if len(filter_name) > 1 and filter_name.startswith("$"):
+                filter_name = filter_name[1:]
+                for filter in field_filters.values():
+                    if filter_name == filter.name:
+                        return filter.convert(value)
+        filter = field_filters["eq"]  # 没有名为None的了
+        return filter.convert(value)
+
+    def _convert_filters(self, where):  # 将转换where的步骤移到manager中，使得在查询之前可以修改where
+        for name, value in where.items():
+            if "." in name:
+                # Todo 这里初步实现了联合查询，只支持一个级别的外键，即只有1个.号
+                k, v = name.rsplit(".", 1)
+                target = self.resource.schema.fields[k].target
+                condition = self.convert_filters(value, target.manager.filters[v])
+                expression = target.manager._expression_for_condition(condition)
+                yield self._expression_for_join(k, expression)  # 返回表达式
+            elif name == "$like":
+                or_expressions = []
+                for field_name in self.resource.meta.get("fuzzy_fields", ()):
+                    condition = self.convert_filters({"$ci": value["$eq"]}, self.filters[field_name])
+                    or_expressions.append(self._expression_for_condition(condition))
+                yield self._or_expression(or_expressions)
+            else:
+                try:
+                    yield self.convert_filters(value, self.filters[name])  # Condition条件实力
+                except KeyError:
+                    raise InvalidFilter(f"Filter <{name}> is not allowed")
+
 
 class SQLAlchemyManager(RelationalManager):
     base_filter = SQLAlchemyBaseFilter
@@ -2861,8 +2858,8 @@ class SQLAlchemyManager(RelationalManager):
         fs = resource.schema
         include_fields = meta.get("include_fields", None)
         exclude_fields = meta.get("exclude_fields", None)
-        read_only_fields = meta.get("read_only_fields", ())
-        write_only_fields = meta.get("write_only_fields", ())
+        read_only = meta.get("read_only", ())
+        write_only = meta.get("write_only", ())
         pre_declared_fields = {f.attribute or k for k, f in fs.fields.items()}
         # note this is the magic
         for name, column in mapper.columns.items():
@@ -2873,9 +2870,9 @@ class SQLAlchemyManager(RelationalManager):
                     continue
 
                 io = "rw"
-                if name in read_only_fields:
+                if name in read_only:
                     io = "r"
-                elif name in write_only_fields:
+                elif name in write_only:
                     io = "w"
 
                 if "w" in io and not (column.nullable or column.default):
@@ -2919,7 +2916,7 @@ class SQLAlchemyManager(RelationalManager):
         kwargs["nullable"] = column.nullable
         if column.info and not kwargs.get("description"):
             kwargs["description"] = column.info
-        
+
         if column.default is not None:
             if column.default.is_sequence:
                 pass
@@ -3455,18 +3452,18 @@ def schema_to_swag_dict(schema, tags=None, example=None):
     if "{id}" in href:
         parameter = {"in": "path", "name": "id", "type": "string", "required": True, "description": "the ID of the resource"}
         flasgger_dict["parameters"].append(parameter)
-    
+
     if method == "GET":
         required_props = _schema.get("required", []) if "required" in _schema else []
         for prop, details in _schema.get("properties", {}).items():
             parameter = {
                 "name": prop,
-                "in":"query",
+                "in": "query",
                 "type": details.get("type", "string") if details.get("type") != "null" else "string",
                 "required": prop in required_props,
                 "description": details.get("description", ""),
             }
-            if prop=="where":
+            if prop == "where":
                 parameter["description"] = "过滤条件"
             elif prop == "sort":
                 parameter["description"] = "排序条件"
@@ -3476,7 +3473,7 @@ def schema_to_swag_dict(schema, tags=None, example=None):
                 parameter["description"] = "每页数量"
             flasgger_dict["parameters"].append(parameter)
     else:
-        flasgger_dict["parameters"].append({"in": "body", "name": "Item", "schema":_schema})
+        flasgger_dict["parameters"].append({"in": "body", "name": "Item", "schema": _schema})
     # Add responses to Flasgger dict.
     for status_code, details in _schema.get("responses", {}).items():
         response = {"description": details.get("description", "")}
@@ -3486,6 +3483,7 @@ def schema_to_swag_dict(schema, tags=None, example=None):
             response["examples"] = example
         flasgger_dict["responses"][status_code] = response
     return flasgger_dict
+
 
 def _make_response(data, code, headers=None):
     settings = {}

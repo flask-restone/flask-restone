@@ -674,7 +674,9 @@ class String(BaseField):
         format = self.response.get("format", None)
         if format and hasattr(_faker, format):
             return getattr(_faker, format)()
-
+        default = self.response.get("default", None)
+        if default is not None:
+            return default
         min_length = self.response.get("minLength", 6)
         max_length = self.response.get("maxLength", 6)
         return "x"*random.randint(min_length,max_length)
@@ -1209,7 +1211,7 @@ class ToOne(BaseField, ResourceMixin):
                 return self.target.meta.key_converters_by_type[json_type].convert(value)
 
 
-class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新 todo 设置可更新
+class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新
     """内联对象就是将一个资源完整嵌入
 
     JSON Schema 可以使用 $ref 关键字来表示递归的数据结构。
@@ -1307,6 +1309,38 @@ class ItemUri(BaseField):
     def faker(self):
         return f"{self.target.route_prefix}/{self.target.manager.id_field.faker()}"
 
+
+# 为了更方便的调用以及别名
+@dataclass
+class fields:  # noqa
+    Raw = BaseField
+    Any = Any
+    AnyOf = AnyOf
+    String = String
+    UUID = UUID
+    Path = Path
+    Uri = Uri
+    Email = Email
+    Date = Date
+    DateTime = DateTime
+    Boolean = Boolean
+    Integer = Integer
+    Number = Number
+
+    Array = Array
+    Object = Object
+    Inline = Inline
+    InlineModel = InlineModel
+    ToOne = ToOne
+    ToMany = ToMany
+    ItemType = ItemType
+    ItemUri = ItemUri
+    # alias
+    Int = Integer
+    Str = String
+    Bool = Boolean
+    List = Array
+    Dict = Object
 
 # -------------------过滤器-------------------------------------
 class Condition:  # 属性 过滤器 值
@@ -3609,36 +3643,3 @@ class Api:
                 # if callable()
                 self.add_route(route, resource)  # ,decorator=_decorator)
         self.resources[resource.meta.name] = resource
-
-
-# 为了更方便的调用以及别名
-@dataclass
-class fields:  # noqa
-    Raw = BaseField
-    Any = Any
-    AnyOf = AnyOf
-    String = String
-    UUID = UUID
-    Path = Path
-    Uri = Uri
-    Email = Email
-    Date = Date
-    DateTime = DateTime
-    Boolean = Boolean
-    Integer = Integer
-    Number = Number
-
-    Array = Array
-    Object = Object
-    Inline = Inline
-    InlineModel = InlineModel
-    ToOne = ToOne
-    ToMany = ToMany
-    ItemType = ItemType
-    ItemUri = ItemUri
-    # alias
-    Int = Integer
-    Str = String
-    Bool = Boolean
-    List = Array
-    Dict = Object

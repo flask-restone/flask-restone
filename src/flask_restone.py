@@ -2149,12 +2149,12 @@ class RouteSet:
 
 class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
     # 用法 author = Relation("UserResource",backref="book",attribute='author')
-    def __init__(self, resource, backref=None, single=True, io="rw", attribute=None):
+    def __init__(self, resource, backref=None, uselist=True, io="rw", attribute=None):
         self.reference = ResourceReference(resource)  # 找到关联的资源类
         self.attribute = attribute  # 属性名
         self.backref = backref  # 反向引用名
         self.io = io
-        self.single = single
+        self.uselist = uselist
 
     @cached_property
     def target(self):
@@ -2165,7 +2165,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
         rule = f"/{_(self.attribute)}"  # /author
         relation_route = ItemRoute(rule=f"{rule}/<{self.target.meta.id_converter}:target_id>")  # /book/001/author/<sid>
         relations_route = ItemRoute(rule=rule)  # /author
-        if self.single:
+        if not self.uselist:
             if "r" in io:
 
                 def relation_instance(resource, item):  # 一对一

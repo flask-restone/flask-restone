@@ -1921,15 +1921,16 @@ def _method_decorator(method):
     return wrapper
 
 
-class Route:
-    HTTP_VERBS = {
-        "GET": "read",
-        "PUT": "update",
-        "POST": "create",
-        "PATCH": "update",
-        "DELETE": "destroy",
-    }
+HTTP_VERBS = {
+    "GET": "read",
+    "PUT": "update",
+    "POST": "create",
+    "PATCH": "update",
+    "DELETE": "destroy",
+}
 
+
+class Route:
     def __init__(
         self,
         method=None,
@@ -1974,7 +1975,7 @@ class Route:
         if self.rel:
             return self.rel  # 关联字符串 read_status?
 
-        verb = self.HTTP_VERBS.get(self.method, self.method.lower())
+        verb = HTTP_VERBS.get(self.method, self.method.lower())
         return camel_case(f"{verb}_{self.attribute}")
 
     def schema_factory(self, resource):  # 规则工厂 将路由的请求与响应规则绑定到资源上
@@ -2472,13 +2473,10 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         fuzzy_fields = ()
         permissions = {
             "read": "anyone",
-            "create": "nobody",
+            "create": "none",
             "update": "create",
             "delete": "update",
         }
-        postgres_text_search_fields = ()
-        postgres_full_text_index = None
-        cache = False  # 缓存
         key_converters = (RefKey(), IDKey())
         datetime_formatter = DateTime
         natural_key = None
@@ -3251,20 +3249,20 @@ class HybridPermission(Permission):
         return False
 
 
-class PrincipalMixin:  # 鉴权插件
-    
-    PERMISSION_GRANTED_STRINGS = ("yes", "everyone", "anyone")
-    PERMISSION_DENIED_STRINGS = ("no", "nobody", "none")
-    PERMISSION_DEFAULTS = (
-        ("read", "yes"),  #
-        ("create", "no"),
-        ("update", "create"),
-        ("delete", "update"),
-    )
+PERMISSION_GRANTED_STRINGS = ("yes", "everyone", "anyone")
+PERMISSION_DENIED_STRINGS = ("no", "nobody", "none")
+PERMISSION_DEFAULTS = (
+    ("read", "yes"),  #
+    ("create", "no"),
+    ("update", "create"),
+    ("delete", "update"),
+)
 
+
+class PrincipalMixin:  # 鉴权插件
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        raw_needs = dict(self.PERMISSION_DEFAULTS)
+        raw_needs = dict(PERMISSION_DEFAULTS)
         raw_needs.update(self.resource.meta.get("permissions", {}))
         self._raw_needs = raw_needs  # 粗的权限字典
 
@@ -3282,9 +3280,9 @@ class PrincipalMixin:  # 鉴权插件
                 return needs
 
             for need in needs:
-                if need in self.PERMISSION_GRANTED_STRINGS:  # 全权
+                if need in PERMISSION_GRANTED_STRINGS:  # 全权
                     return {True}
-                if need in self.PERMISSION_DENIED_STRINGS:  # 无权
+                if need in PERMISSION_DENIED_STRINGS:  # 无权
                     options.add(Permission(("permission-denied",)))
                 elif need in methods:  # 如果权限也是 curd 词
                     if need in path:
@@ -3435,19 +3433,31 @@ def principals(manager):
     return PrincipalsManager
 
 
-def schema_to_swag_dict(schema, tags=None, example=None):
-    flasgger_dict = {"tags": tags or [], "parameters": [], "responses": {"200": {"description": "正常返回"}}}
-    _schema = schema.get("schema", {})
+HTTP_VERBS_CN = {
+    "create": "创建{}",
+    "destroy": "删除{}",
+    "instances": "查询{}列表",
+    "self": "查询{}详情",
+    "update": "修改{}",
+}
 
+
+def schema_to_swag_dict(schema, route, resource, tags=None, example=None):
     method = schema.get("method", "")
     href = schema.get("href", "")
-    # Add parameters to Flasgger dict.
+    rel = schema.get("rel", "")
+    rel_cn = HTTP_VERBS_CN.get(rel, None)
+    title = rel_cn.format(tags[0]) if rel_cn else rel
+    summary = route.description or title
+    flasgger_dict = {"summary": summary, "tags": tags or [], "parameters": [], "responses": {"200": {"description": "success", "examples": ""}}}
+    _schema = schema.get("schema", {})
+
     if "{id}" in href:
-        parameter = {"in": "path", "name": "id", "type": "string", "required": True, "description": "the ID of the resource"}
+        parameter = {"in": "path", "name": "id", "type": "string", "required": True, "description": f"the ID of the {resource.meta.name}"}
         flasgger_dict["parameters"].append(parameter)
 
     if method == "GET":
-        required_props = _schema.get("required", []) if "required" in _schema else []
+        required_props = _schema.get("required", [])
         for prop, details in _schema.get("properties", {}).items():
             parameter = {
                 "name": prop,
@@ -3465,11 +3475,13 @@ def schema_to_swag_dict(schema, tags=None, example=None):
             elif prop == PER_PAGE:
                 parameter["description"] = "每页数量"
             flasgger_dict["parameters"].append(parameter)
-    else:
-        flasgger_dict["parameters"].append({"in": "body", "name": "Item", "schema": _schema})
-    # Add responses to Flasgger dict.
+    elif method == "POST":
+        flasgger_dict["parameters"].append({"in": "body", "name": "Item", "schema": resource.schema.request})
+    elif method in ("PATCH", "PUT"):
+        flasgger_dict["parameters"].append({"in": "body", "name": "Item", "schema": resource.schema.update})
+
     for status_code, details in _schema.get("responses", {}).items():
-        response = {"description": details.get("description", "")}
+        response = {"description": details.get("description", route.decription)}
         if "examples" in details:
             response["examples"] = details["examples"]
         elif example:

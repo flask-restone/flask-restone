@@ -1434,7 +1434,7 @@ NotEqualFilter = filter_factory("ne", lambda a, b: a != b)
 LessThanEqualFilter = filter_factory("le", lambda a, b: a <= b)
 GreaterThanEqualFilter = filter_factory("ge", lambda a, b: a >= b)
 InFilter = filter_factory("in", lambda a, b: a in b)
-NotInFilter = filter_factory("ni", lambda a, b: not a in b)
+NotInFilter = filter_factory("ni", lambda a, b: a not in b)
 ContainsFilter = filter_factory("ha", lambda a, b: hasattr(a, "__iter__") and b in a)
 StringContainsFilter = filter_factory("ct", lambda a, b: a and b in a)
 StringIContainsFilter = filter_factory("ci", lambda a, b: a and b.lower() in a.lower())
@@ -1705,7 +1705,7 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         return self._filter_required(result)
 
     def faker(self):
-        result = [self.resource.schema.faker() for i in range(2)]
+        result = [self.resource.schema.faker() for _ in range(2)]
         if self.required_fields is None:
             return result
         return self._filter_required(result)
@@ -2639,9 +2639,6 @@ class Manager:
         except KeyError:
             raise RuntimeError(f'No appropriate field class for "{python_type}" type found')
 
-    def get_field_comparators(self, field):
-        pass
-
     def relation_instances(self, item, attribute, target_resource, page=None, per_page=None):
         raise NotImplementedError()
 
@@ -3442,7 +3439,10 @@ HTTP_VERBS_CN = {
 }
 
 
-def schema_to_swag_dict(schema, route, resource, tags=None, example=None):
+def schema_to_swag_dict(route, resource, example=None):
+    
+    schema = route.schema_factory(resource)
+    tags = [resource.meta.title or resource.meta.name]
     method = schema.get("method", "")
     href = schema.get("href", "")
     rel = schema.get("rel", "")
@@ -3552,10 +3552,7 @@ class Api:
     def _register_swag_view(self, app, route, resource, view_func):
         """注册到swager"""
         with app.app_context():
-            schema = route.schema_factory(resource)
-            tags = [resource.meta.title or resource.meta.name]
-            if schema["rel"] != "describedBy":
-                swag_from(schema_to_swag_dict(schema, tags))(view_func)
+            swag_from(schema_to_swag_dict(route, resource))(view_func)
 
     def _register_view(self, app, rule, view_func, endpoint, methods, relation):
         decorate_view_func = relation != "describedBy" or app.config["RESTONE_DECORATE_SCHEMA_ENDPOINTS"]

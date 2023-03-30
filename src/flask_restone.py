@@ -75,7 +75,8 @@ HTTP_METHODS = ("GET", "PUT", "POST", "PATCH", "DELETE")
 
 PAGE = "page"
 PER_PAGE = "per_page"
-
+DEFAULT_PER_PAGE = 20
+MAX_PER_PAGE = 100
 # ---------------------------信号量--------------------
 _signals = Namespace()
 before_create = _signals.signal("before-create")
@@ -191,7 +192,13 @@ class InvalidJSON(RestoneException):
 class InvalidFilter(RestoneException):
     status_code = 400
 
-
+class InvalidUrl(RestoneException):
+    status_code = 400
+    
+class OpreationNotAllowed(RestoneException):
+    status_code = 405
+  
+    
 class Forbidden(RestoneException):
     status_code = 403
 
@@ -1264,7 +1271,14 @@ class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新
     def faker(self):
         return self.target.schema.faker()
 
-
+    def example(self):
+        schema = self.target.schema.response
+        faker_data = self.faker()
+        for k,v in schema['properties'].items():
+            v['example'] = faker_data.get(k,"*")
+        serializable_schema = json.loads(json.dumps(schema, default=str))
+        return serializable_schema
+    
 class ToMany(Array):
     def __init__(self, resource, **kwargs):
         super().__init__(Inline(resource, nullable=False), **kwargs)
@@ -1709,7 +1723,15 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         if self.required_fields is None:
             return result
         return self._filter_required(result)
-
+    
+    def example(self):
+        schema = self.resource.schema.response # 此处是cache_property
+        faker_data = self.resource.schema.faker()
+        for k,v in schema['properties'].items():
+            v['example'] = faker_data.get(k,"*")
+        serializable_schema = json.loads(json.dumps(schema, default=str))
+        return {"type": "array", "items": serializable_schema}
+    
     def _filter_required(self, result):
         out = []
         for item in result:
@@ -2056,6 +2078,16 @@ class Route:
     def request_schema(self, schema):
         self.schema = schema
 
+    def response_example(self, resource):
+        if isinstance(self.response_schema, (Instances, Inline)):
+            response_schema = _bind_schema(self.response_schema, resource)
+            return response_schema.example()
+        elif isinstance(self.response_schema, BaseField):
+            response_schema = self.response_schema.response
+            response_schema['example'] = self.response_schema.faker()
+            return response_schema
+        return {}
+    
     def rule_factory(self, resource, relative=False):  # 规则工厂
         rule = self.rule  # 规则是个字符串
         if rule is None:
@@ -2397,6 +2429,9 @@ class ModelResourceMeta(ResourceMeta):
         return class_
 
 
+RFC6902_PATCH = Array(Object({"op": String(enum=("add", "replace", "remove", "move", "copy", "test")), "path": String(pattern="^/.+"), "value": Any(nullable=True)}))
+
+
 class ModelResource(Resource, metaclass=ModelResourceMeta):
     manager = None
 
@@ -2442,7 +2477,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
     read.request_schema = None
     read.response_schema = Inline("self")
 
-    @read.PATCH(rel="update")
+    @read.PUT(rel="update")
     def update(self, properties, id):
         item = self.manager.read(id)
         updated_item = self.manager.update(item, properties)
@@ -2456,6 +2491,120 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         self.manager.delete_by_id(id)
         return None, 204
 
+    @Route.PATCH("", rel="patch")
+    def patch(self, patch: RFC6902_PATCH):
+        """
+        根据 RFC 6902 规范执行指定路径下资源的操作。
+        
+        Args:
+            patch: RFC6902_PATCH 对象，包含一组操作。
+            
+        Raises:
+            OpreationNotAllowed: 如果指定的操作不在允许的操作列表中，则引发此异常。
+            InvalidUrl: 如果指定的路径不存在，则引发此异常。
+            OpreationNotAllowed: 如果指定的操作被允许但未实现，则引发此异常。
+            InvalidJSON: 如果参数值不是预期的格式，则引发此异常。
+            AssertionError: 如果指定路径对应的值与参数值不匹配，则引发此异常。
+            
+        Returns:
+            无返回值，HTTP状态码为204。
+        """
+        
+        for p in patch:
+            op = p.pop("op")  # 可用操作
+            if op not in self.meta.allowed_opreations:
+                raise OpreationNotAllowed(f"{op} is not allowed")
+            path = p.pop("path")  # 操作路径
+            if not self.path_exists(path):
+                raise InvalidUrl(f"{path} not found")
+            value = p.pop("value", None)  # 可选参数值
+            func = getattr(self, op,None)
+            if func is None:
+                raise OpreationNotAllowed(f"{op} is allowed but not implemented")
+            func(path, value)
+        # 统一提交，中途报错则不会提交
+        self.manager.commit()
+        return None, 204
+
+    def is_root_path(self, path):
+        return path == "/"
+    
+    def is_item_path(self,path):
+        return path[0]=="/" and path.strip("/").count("/")==0
+    
+    def is_attr_path(self,path):
+        return path[0]=="/" and path.strip("/").count("/")==1
+    
+    def path_exists(self, path: str) -> bool:
+        """判断路径是否存在,目前只支持三级"""
+        if self.is_root_path(path):
+            return True
+        parts = path.rstrip("/").split("/")
+    
+        try:
+            item = self.manager.read(parts[1])
+        except ItemNotFound:
+            return False
+        if len(parts) == 2:
+            return True
+        if hasattr(item,parts[2]):
+            return True
+        return False
+
+    def add(self,path,value):
+        if self.is_root_path(path):
+            return self.manager.create(value,commit=False)
+        raise InvalidUrl("add only support root path")
+    
+    def replace(self,path,value):
+        if self.is_item_path(path):
+            item = self.manager.read(path[1:])
+            return self.manager.update(item,value,commit=False)
+        elif self.is_attr_path(path):
+            id_,attr = path.strip("/").split("/")
+            item = self.manager.read(id_)
+            return self.manager.update(item, {attr:value},commit=False)
+        raise InvalidUrl("replace not support root path")
+    
+    def remove(self,path,value=None): # soft delete elegant delete hard delete
+        if self.is_item_path(path):
+            item = self.manager.read(path[1:])
+            return self.manager.delete(item,commit=False)
+        raise InvalidUrl("remove only support item path")
+        
+    def move(self,path,value):
+        if self.is_item_path(path):
+            item = self.manager.read(path[1:])
+            id_attribute = self.meta.id_attribute or "id"
+            if isinstance(value,str) and self.is_item_path(value) and not self.path_exists(value):
+                return self.manager.update(item, {id_attribute:value[1:]},commit=False) #todo 兼顾不同类型id
+            elif isinstance(value,dict): # 可能有其他属性表示资源实体路径
+                return self.manager.update(item,value,commit=False)
+            raise InvalidJSON("value must be path string or object")
+        raise InvalidUrl("move only support item path")
+    
+    def copy(self,path,value=None):
+        if self.is_item_path(path):
+            item = self.manager.read(path[1:])
+            props = Inline("self").convert(item)
+            props.pop("$id")
+            if isinstance(value,dict):
+                props.update(value)  # copy 并更新数据
+            return self.manager.create(props,commit=False)  # copy
+        raise InvalidUrl("copy only support item path")
+    
+    def test(self,path,value):
+        # 此处的test实际上是测试路径对应的值是否与value相同
+        if self.is_attr_path(path):
+            id_, attr = path.strip("/").split("/")
+            item = self.manager.read(id_)
+            if not hasattr(item,attr):
+                raise InvalidUrl(f"{path} not found")
+            if getattr(item,attr) != value:
+                raise AssertionError(f"{path} does not match {value}")
+            return None
+        raise InvalidUrl("test only support attr path")
+    
     class Schema:  # 设置各个字段的语法用的
         pass
 
@@ -2477,9 +2626,12 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
             "update": "create",
             "delete": "update",
         }
+        allowed_opreations = ("add", "replace", "remove", "move", "copy", "test")
         key_converters = (RefKey(), IDKey())
         datetime_formatter = DateTime
         natural_key = None
+
+
 
 
 class Pagination:
@@ -3438,9 +3590,22 @@ HTTP_VERBS_CN = {
     "update": "修改{}",
 }
 
+def get_description(resource,name):
+    field = resource.schema.fields.get(name,None)
+    if field and field.description:
+        return field.description
+    model_field = getattr(resource.meta.model,name,None)
+    if model_field:
+        return getattr(model_field,"info",name)
+    return name
 
-def schema_to_swag_dict(route, resource, example=None):
-    
+def get_example(resource,name):
+    field = resource.schema.fields.get(name, None)
+    if field:
+        return field.faker()
+    return name
+
+def schema_to_swag_dict(route, resource):
     schema = route.schema_factory(resource)
     tags = [resource.meta.title or resource.meta.name]
     method = schema.get("method", "")
@@ -3449,11 +3614,19 @@ def schema_to_swag_dict(route, resource, example=None):
     rel_cn = HTTP_VERBS_CN.get(rel, None)
     title = rel_cn.format(tags[0]) if rel_cn else rel
     summary = route.description or title
-    flasgger_dict = {"summary": summary, "tags": tags or [], "parameters": [], "responses": {"200": {"description": "success", "examples": ""}}}
+    flasgger_dict = {"summary": summary,
+                     "tags": tags or [],
+                     "parameters": [],
+                     "responses": {"200": {"description": "success", "examples": ""}}}
+
     _schema = schema.get("schema", {})
 
     if "{id}" in href:
-        parameter = {"in": "path", "name": "id", "type": "string", "required": True, "description": f"the ID of the {resource.meta.name}"}
+        parameter = {"in": "path",
+                     "name": "id",
+                     "type": "string",
+                     "required": True,
+                     "description": f"the ID of the {resource.meta.name}"}
         flasgger_dict["parameters"].append(parameter)
 
     if method == "GET":
@@ -3462,31 +3635,52 @@ def schema_to_swag_dict(route, resource, example=None):
             parameter = {
                 "name": prop,
                 "in": "query",
-                "type": details.get("type", "string") if details.get("type") != "null" else "string",
+                "type": details.get("type", "string") if details.get(
+                    "type") != "null" else "string",
                 "required": prop in required_props,
                 "description": details.get("description", ""),
             }
             if prop == "where":
-                parameter["description"] = "过滤条件"
+                parameter[
+                    "description"] = '过滤条件,格式如{field:{"$op":value}},' + \
+                                     f'当前field有{resource.meta.filters}' + \
+                                     "其中op可以是eq|ne|lt|le|gt|ge|si|sw|ei|ew|cw|ct等." \
+                                     "特例，如果是等于关系可省去$eq,如{field:value}，" \
+                                     "如果是模糊查询可不指定字段，而使用$like,如{$like:value}"
             elif prop == "sort":
-                parameter["description"] = "排序条件"
+                parameter[
+                    "description"] = '排序条件,格式如{"name":true,"age":false} 表示按name降序,按age升序'
             elif prop == PAGE:
-                parameter["description"] = "分页页码"
+                parameter["description"] = "分页页码,默认为 1"
             elif prop == PER_PAGE:
-                parameter["description"] = "每页数量"
+                parameter[
+                    "description"] = f"每页数量,默认为{DEFAULT_PER_PAGE},最大值为{MAX_PER_PAGE}"
             flasgger_dict["parameters"].append(parameter)
-    elif method == "POST":
-        flasgger_dict["parameters"].append({"in": "body", "name": "Item", "schema": resource.schema.request})
-    elif method in ("PATCH", "PUT"):
-        flasgger_dict["parameters"].append({"in": "body", "name": "Item", "schema": resource.schema.update})
 
-    for status_code, details in _schema.get("responses", {}).items():
-        response = {"description": details.get("description", route.decription)}
-        if "examples" in details:
-            response["examples"] = details["examples"]
-        elif example:
-            response["examples"] = example
-        flasgger_dict["responses"][status_code] = response
+        # if rel in ("self","instances"):
+            # 获取输出样例
+        response_schema = route.response_example(resource)
+        flasgger_dict["responses"]["200"] = {"description": "success", "schema": response_schema}
+
+    elif method[0] == "P":
+        if rel == "create":
+            request_schema = resource.schema.request
+        elif rel == "update":
+            request_schema = resource.schema.update
+        else:
+            request_schema = route.request_schema.request if route.request_schema else {}
+
+        for k, v in request_schema.get("properties", {}).items():
+            v['description'] = get_description(resource, k)
+            v['example'] = get_example(resource, k)
+
+        flasgger_dict["parameters"].append({"in": "body",
+                                            "name": "Item",
+                                            "schema": request_schema,
+                                            })
+
+        flasgger_dict["responses"]["200"] = {"description": "success", "examples": '{"result":"success"}'}
+
     return flasgger_dict
 
 
@@ -3526,8 +3720,8 @@ class Api:
             self.init_app(app)
 
     def init_app(self, app):
-        app.config.setdefault("RESTONE_MAX_PER_PAGE", 100)
-        app.config.setdefault("RESTONE_DEFAULT_PER_PAGE", 20)
+        app.config.setdefault("RESTONE_MAX_PER_PAGE", MAX_PER_PAGE)
+        app.config.setdefault("RESTONE_DEFAULT_PER_PAGE", DEFAULT_PER_PAGE)
         app.config.setdefault("RESTONE_DEFAULT_PARSE_STYLE", "json")
         app.config.setdefault("RESTONE_DECORATE_SCHEMA_ENDPOINTS", True)
         app.config.setdefault("RESTONE_REGISTER_SWAGER_ENDPOINTS", True)

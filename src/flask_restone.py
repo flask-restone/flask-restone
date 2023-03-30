@@ -578,7 +578,7 @@ class BaseField(Schema):
 
     def faker(self):
         """假数据生成，用于测试"""
-        return NotImplemented
+        return f"{self.attribute}"
 
 
 class Any(BaseField):  # 可以用字典初始化
@@ -2491,8 +2491,8 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         self.manager.delete_by_id(id)
         return None, 204
 
-    @Route.PATCH("", rel="patch")
-    def patch(self, patch: RFC6902_PATCH):
+    @Route.PATCH("", rel="patch",schema=RFC6902_PATCH)
+    def patch(self):
         """
         根据 RFC 6902 规范执行指定路径下资源的操作。
         
@@ -2509,7 +2509,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         Returns:
             无返回值，HTTP状态码为204。
         """
-        
+        patch = request.json # 以列表形式提供不具名
         for p in patch:
             op = p.pop("op")  # 可用操作
             if op not in self.meta.allowed_opreations:
@@ -2586,8 +2586,9 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
     def copy(self,path,value=None):
         if self.is_item_path(path):
             item = self.manager.read(path[1:])
-            props = Inline("self").convert(item)
-            props.pop("$id")
+            props = vars(item)
+            props.pop("id")
+            props.pop("_sa_instance_state")
             if isinstance(value,dict):
                 props.update(value)  # copy 并更新数据
             return self.manager.create(props,commit=False)  # copy

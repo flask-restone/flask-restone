@@ -3837,3 +3837,231 @@ class Api:
                 # if callable()
                 self.add_route(route, resource)  # ,decorator=_decorator)
         self.resources[resource.meta.name] = resource
+
+
+OPERATORS = {
+    "$and": "&",
+    "$or": "|",
+    "$lt": "<",
+    "$gt": ">",
+    "$eq": "==",
+    "$ne": "!=",
+    "$le": "<=",
+    "$ge": ">=",
+    "$in": "in",
+    "$ni": "not in",
+    "$ha": "str.contains",
+    "$ct": "str.contains",
+    "$ci": "str.contains",
+    "$sw": "str.startswith",
+    "$si": "str.startswith",
+    "$ew": "str.endswith",
+    "$ei": "str.endswith",
+    "$bt": "between"
+}
+
+def construct_query(filter_dict):
+    """
+    根据过滤条件字典构造查询字符串。
+    Args:
+        filter_dict (dict): 包含过滤条件的字典。字典的键是查询操作符，
+            如 "$eq"、"$gt"、"$in" 等，值是一个包含两个元素的列表，分别表示
+            查询的字段名和阈值。
+    Returns:
+        str: 构造的查询字符串，用于查询符合过滤条件的数据。
+    Raises:
+        KeyError: 如果过滤条件字典中包含未知的操作符。
+    """
+    key, value = next(iter(filter_dict.items()))
+    operator = OPERATORS[key]
+    if key in ("$and", "$or"):
+        return f"({operator.join([construct_query(subdict) for subdict in value])})"
+    field = value[0]
+    threshold = value[1]
+    if operator in ["in", "not in"]:
+        value_str = "[" + ", ".join([f"'{v}'" for v in threshold]) + "]"
+        return f"{field} {operator} {value_str}"
+    if operator in ["between"]:
+        return f"{field}.astype('datetime64').{operator} ('{threshold[0]}','{threshold[1]}')"
+    if operator.startswith("str."):
+        return f"{field}.astype('str').{operator}('{threshold}')"
+    return f"{field} {operator} {threshold}"
+
+class DataFrameManager:
+    READ_CHUNK_SIZE = 50000
+    WRITE_CHUNK_SIZE = 50000
+
+    def __init__(self, path, id_field=None):
+        self.path = path
+        self.dataframe = self.load(path)
+        self.id_field = id_field
+
+    @classmethod
+    def load(cls, path, **kwargs):
+        import pandas as pd
+        data_list = []
+        with pd.read_csv(path, chunksize=cls.READ_CHUNK_SIZE, **kwargs) as reader:
+            for chunk in reader:
+                data_list.append(chunk)
+        dataframe = pd.concat(data_list, ignore_index=True)
+        return dataframe
+
+    @classmethod
+    def save(cls,dataframe, path, **kwargs):
+        dataframe.to_csv(path, chunksize=cls.WRITE_CHUNK_SIZE, mode="w", index=False, **kwargs)
+
+    def commit(self):
+        self.save(self.dataframe,self.path)
+
+
+    def preview(self,row_page, row_perpage, col_page, col_perpage):
+        """
+        对于特别大的表可以按照行和列双向翻页
+        :param row_page: 当前行页码
+        :param row_perpage: 每页行数
+        :param col_page: 当前列页码
+        :param col_perpage: 每页列数
+        :return: 数据预览
+        """
+        df = self.dataframe
+        row_start = (row_page - 1) * row_perpage
+        row_end = row_start + row_perpage
+        col_start = (col_page - 1) * col_perpage
+        col_end = col_start + col_perpage
+        data = df.iloc[row_start:row_end, col_start:col_end]
+        return data.to_json(orient="split")
+
+    def paginated_instances(self, page, per_page, where=None, sort=None,options=None):
+        """
+        分页查询方法。接受以下参数：
+        - page: 当前页码。
+        - per_page: 每页显示的数据条数。
+        - where: 查询条件。
+        - sort: 排序条件。
+        - options: 其他查询选项。
+        """
+        instances = self.instances(where=where, sort=sort, options=options)
+        return Pagination.from_list(instances, page, per_page).items
+
+    def instances(self, where=None, sort=None, options=None):
+        """
+        查询所有数据的方法。接受以下参数：
+        - where: 查询条件。
+        - sort: 排序条件。
+        - options: 其他查询选项。
+        """
+        df = self.dataframe
+        if where is not None:
+            where = construct_query(where)
+            df = df.query(where)
+        if sort is not None:
+            df = df.sort_values(by=list(sort.keys()),ascending=list(sort.values()))
+        if options is not None:
+            df = df.filter(items=options)
+        return df.to_dict(orient='records')
+
+    def columns(self):
+        df = self.dataframe
+        return df.columns.tolist()
+
+    def count(self,where=None):
+        df = self.dataframe
+        if where is not None:
+            where = construct_query(where)
+            df = df.query(where)
+        return df.shape[0]
+
+    def first(self, where=None, sort=None):
+        """
+        查询第一条数据的方法。接受以下参数：
+        - where: 查询条件。
+        - sort: 排序条件。
+        """
+        try:
+            return self.instances(where, sort)[0]
+        except IndexError:
+            raise ItemNotFound(self.resource, where=where)
+
+    def all(self, where=None, sort=None):
+        """
+        查询所有数据的方法。接受以下参数：
+        - where: 查询条件。
+        - sort: 排序条件。
+        """
+        return self.instances(where, sort)
+
+    def create(self, properties, commit=True):
+        """
+        创建新数据的方法。接受以下参数：
+        - properties: 要创建的数据的属性。
+        - commit: 是否在创建后立即提交更改。
+        """
+        # 将新数据添加到数据框中
+        df = self.dataframe.append(properties, ignore_index=True)
+        self.dataframe = df
+
+        # 如果需要提交更改，则立即提交
+        if commit:
+            self.commit()
+
+        # 返回新创建的数据
+        return properties
+
+    def read(self, id):
+        """
+        查询指定数据的方法。接受以下参数：
+        - id: 要查询的数据的 ID。
+        """
+        # 根据 ID 查找指定的数据
+        df = self.dataframe
+        if not self.id_field:
+            index = id
+        else:
+            index = df.index[df[self.id_field] == id].to_list()[0]
+        item = df.loc[index]
+        return item
+
+    def update(self, item, changes, commit=True):
+        """
+        更新指定数据的方法。接受以下参数：
+        - item: 要更新的数据。
+        - changes: 要更新的属性。
+        - commit: 是否在更新后立即提交更改。
+        """
+        # 获取指定数据的 ID
+        index = item._name
+        # 根据 ID 查找指定的数据
+        df = self.dataframe
+        # 更新数据
+        for key, value in changes.items():
+            df.at[index, key] = value
+        self.dataframe = df
+
+        # 如果需要提交更改，则立即提交
+        if commit:
+            self.commit()
+        # 返回更新后的数据
+        return df.loc[index]
+
+    def delete(self, item):
+        """
+        删除指定数据的方法。接受以下参数：
+        - item: 要删除的数据。
+        """
+        # 获取指定数据的 ID
+        index = item._name
+        # 根据 ID 查找指定的数据
+        df = self.dataframe
+        # 从数据框中删除数据
+        df = df.drop(index)
+        self.dataframe = df
+        # 提交更改
+        self.commit()
+
+    def delete_by_id(self, id):
+        """
+        根据 ID 删除数据的方法。接受以下参数：
+        - id: 要删除的数据的 ID。
+        """
+        item = self.read(id)
+        self.delete(item)

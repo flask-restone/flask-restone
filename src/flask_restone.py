@@ -1367,16 +1367,6 @@ class Condition:  # 属性 过滤器 值
         return self.filter.op(get_value(self.attribute, item, None), self.value)
 
 
-class FilterMeta(type):
-    def __new__(mcs, name, bases, members):
-        if "name" in members:
-            name = members["name"].upper()
-        if "op" in members:
-            func = members["op"]
-            members["op"] = classmethod(lambda s, a, b: func(a, b))
-        return super(FilterMeta, mcs).__new__(mcs, name, bases, members)
-
-
 class BaseFilter(Schema):
     name = None
     namespace = "base"
@@ -1437,7 +1427,7 @@ class BaseFilter(Schema):
 
 
 def filter_factory(name, func):
-    return FilterMeta(name, (BaseFilter,), {"op": func, "name": name})
+    return type(name.upper(), (BaseFilter,), {"op": classmethod(lambda s, a, b: func(a, b)), "name": name})
 
 
 # 属性过滤
@@ -1494,84 +1484,26 @@ class SQLAlchemyBaseFilter(BaseFilter):
         return query.filter(and_(*expressions))
 
 
-class SQLEqualFilter(SQLAlchemyBaseFilter, EqualFilter):
-    def expression(self, value):
-        return self.column == value
+def sqlfilter_factory(name, func):
+    return type(name.upper(), (SQLAlchemyBaseFilter,), {'expression': lambda self,value:func(self.column,value),"name":name})
 
 
-class SQLNotEqualFilter(SQLAlchemyBaseFilter, NotEqualFilter):
-    def expression(self, value):
-        return self.column != value
-
-
-class SQLLessThanFilter(SQLAlchemyBaseFilter, LessThanFilter):
-    def expression(self, value):
-        return self.column < value
-
-
-class SQLLessThanEqualFilter(SQLAlchemyBaseFilter, LessThanEqualFilter):
-    def expression(self, value):
-        return self.column <= value
-
-
-class SQLGreaterThanFilter(SQLAlchemyBaseFilter, GreaterThanFilter):
-    def expression(self, value):
-        return self.column > value
-
-
-class SQLGreaterThanEqualFilter(SQLAlchemyBaseFilter, GreaterThanEqualFilter):
-    def expression(self, value):
-        return self.column >= value
-
-
-class SQLInFilter(SQLAlchemyBaseFilter, InFilter):
-    def expression(self, values):
-        return self.column.in_(values) if len(values) else False
-
-
-class SQLNotInFilter(SQLAlchemyBaseFilter, NotInFilter):
-    def expression(self, values):
-        return self.column.notin_(values) if len(values) else True
-
-
-class SQLContainsFilter(SQLAlchemyBaseFilter, ContainsFilter):
-    def expression(self, value):
-        return self.column.contains(value)
-
-
-class SQLStringContainsFilter(SQLAlchemyBaseFilter, StringContainsFilter):
-    def expression(self, value):
-        return self.column.like("%" + value.replace("%", "\\%") + "%")
-
-
-class SQLStringIContainsFilter(SQLAlchemyBaseFilter, StringIContainsFilter):
-    def expression(self, value):
-        return self.column.ilike("%" + value.replace("%", "\\%") + "%")
-
-
-class SQLStartsWithFilter(SQLAlchemyBaseFilter, StartsWithFilter):
-    def expression(self, value):
-        return self.column.startswith(value.replace("%", "\\%"))
-
-
-class SQLIStartsWithFilter(SQLAlchemyBaseFilter, IStartsWithFilter):
-    def expression(self, value):
-        return self.column.ilike(value.replace("%", "\\%") + "%")
-
-
-class SQLEndsWithFilter(SQLAlchemyBaseFilter, EndsWithFilter):
-    def expression(self, value):
-        return self.column.endswith(value.replace("%", "\\%"))
-
-
-class SQLIEndsWithFilter(SQLAlchemyBaseFilter, IEndsWithFilter):
-    def expression(self, value):
-        return self.column.ilike("%" + value.replace("%", "\\%"))
-
-
-class SQLDateBetweenFilter(SQLAlchemyBaseFilter, DateBetweenFilter):
-    def expression(self, value):
-        return self.column.between(value[0], value[1])
+SQLEqualFilter = sqlfilter_factory('eq', lambda c, v: c == v)
+SQLNotEqualFilter = sqlfilter_factory('ne', lambda c, v: c != v)
+SQLLessThanFilter = sqlfilter_factory('lt', lambda c, v: c < v)
+SQLLessThanEqualFilter = sqlfilter_factory('le', lambda c, v: c <= v)
+SQLGreaterThanFilter = sqlfilter_factory('gt', lambda c, v: c > v)
+SQLGreaterThanEqualFilter = sqlfilter_factory('ge', lambda c, v: c >= v)
+SQLInFilter = sqlfilter_factory('in', lambda c, v: c.in_(v) if len(v) else False)
+SQLNotInFilter = sqlfilter_factory('ni', lambda c, v: c.notin_(v) if len(v) else True)
+SQLContainsFilter = sqlfilter_factory('ha', lambda c, v: c.contains(v))
+SQLStringContainsFilter = sqlfilter_factory('ct', lambda c, v: c.like("%" + v.replace("%", "\\%") + "%"))
+SQLStringIContainsFilter = sqlfilter_factory('ci', lambda c, v: c.ilike("%" + v.replace("%", "\\%") + "%"))
+SQLStartsWithFilter = sqlfilter_factory('sw', lambda c, v: c.startswith(v.replace("%", "\\%")))
+SQLIStartsWithFilter = sqlfilter_factory('si', lambda c, v: c.ilike(v.replace("%", "\\%") + "%"))
+SQLEndsWithFilter = sqlfilter_factory('ew', lambda c, v: c.endswith(v.replace("%", "\\%")))
+SQLIEndsWithFilter = sqlfilter_factory('ei', lambda c, v: c.ilike("%" + v.replace("%", "\\%")))
+SQLDateBetweenFilter = sqlfilter_factory('bt', lambda c, v: c.between(v[0], v[1]))
 
 
 FIELD_FILTERS_DICT = {

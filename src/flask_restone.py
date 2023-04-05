@@ -3506,8 +3506,8 @@ def get_description(resource,name):
     if field and field.description:
         return field.description
     model_field = getattr(resource.meta.model,name,None)
-    if model_field:
-        return getattr(model_field,"info",name)
+    if model_field and model_field.info:
+        return model_field.info
     return name
 
 def get_example(resource,name):

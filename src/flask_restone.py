@@ -38,7 +38,6 @@ from werkzeug.wrappers import Response
 
 __all__ = [
     "fields",
-    "filters",
     "ModelResource",
     "Route",
     "Api",
@@ -941,7 +940,6 @@ class Object(BaseField, ResourceMixin):
       },
       "additionalProperties": false
     }
-
     在这个例子中，'patternProperties'的值是一个对象，其中包含两个属性，分别是以'A'和'B'开头的属性名的正则表达式模式。
     每个属性的值是一个 JSON Schema 对象，用于描述属性的限制条件。
     该 JSON Schema 还使用了'additionalProperties'关键字，用于禁止出现除了以'A'和'B'开头的属性名以外的其他属性。
@@ -956,6 +954,10 @@ class Object(BaseField, ResourceMixin):
         other_props=None,
         **kwargs,
     ):
+        if isinstance(properties, str):  # todo 优化这里的逻辑，目前是只能展示不能校验
+            if properties == "self":
+                super().__init__({"$ref": "#"})
+                return
         self.properties = None
         self.pattern_props = None
         self.other_props = None
@@ -1367,9 +1369,10 @@ class Condition:  # 属性 过滤器 值
         return self.filter.op(get_value(self.attribute, item, None), self.value)
 
 
+    
 class BaseFilter(Schema):
     name = None
-    namespace = "base"
+    filters = {}
 
     def __init__(self, field=None, attribute=None):
         self._attribute = attribute
@@ -1415,63 +1418,38 @@ class BaseFilter(Schema):
             "additionalProperties": False,
         }
 
+
     @classmethod
-    def named_filters(cls):
-        dct = {}
-        for c in cls.__subclasses__():
-            if c.name is not None:
-                dct[c.name] = c
-            elif c.namespace == cls.namespace:
-                dct.update(c.named_filters())
-        return dct
-
-
-def filter_factory(name, func):
-    return type(name.upper(), (BaseFilter,), {"op": classmethod(lambda s, a, b: func(a, b)), "name": name})
-
-
+    def make_filter(cls, name, func):
+        return type(name.upper(), (cls,), {"op": classmethod(lambda s, a, b: func(a, b)), "name": name})
+    
+    @classmethod
+    def register(cls, name, func): # 类方法返回子类
+        class_ = cls.make_filter(name,func)
+        cls.filters[name] = class_
+    
 # 属性过滤
-LessThanFilter = filter_factory("lt", lambda a, b: a < b)
-GreaterThanFilter = filter_factory("gt", lambda a, b: a > b)
-EqualFilter = filter_factory("eq", lambda a, b: a == b)
-NotEqualFilter = filter_factory("ne", lambda a, b: a != b)
-LessThanEqualFilter = filter_factory("le", lambda a, b: a <= b)
-GreaterThanEqualFilter = filter_factory("ge", lambda a, b: a >= b)
-InFilter = filter_factory("in", lambda a, b: a in b)
-NotInFilter = filter_factory("ni", lambda a, b: a not in b)
-ContainsFilter = filter_factory("ha", lambda a, b: hasattr(a, "__iter__") and b in a)
-StringContainsFilter = filter_factory("ct", lambda a, b: a and b in a)
-StringIContainsFilter = filter_factory("ci", lambda a, b: a and b.lower() in a.lower())
-StartsWithFilter = filter_factory("sw", lambda a, b: a.startswith(b))
-IStartsWithFilter = filter_factory("si", lambda a, b: a.lower().startswith(b.lower()))
-EndsWithFilter = filter_factory("ew", lambda a, b: a.endswith(b))
-IEndsWithFilter = filter_factory("ei", lambda a, b: a.lower().endswith(b.lower()))
-DateBetweenFilter = filter_factory("bt", lambda a, b: b[0] <= a <= b[1])
+BaseFilter.register("lt", lambda a, b: a < b)
+BaseFilter.register("gt", lambda a, b: a > b)
+BaseFilter.register("eq", lambda a, b: a == b)
+BaseFilter.register("ne", lambda a, b: a != b)
+BaseFilter.register("le", lambda a, b: a <= b)
+BaseFilter.register("ge", lambda a, b: a >= b)
+BaseFilter.register("in", lambda a, b: a in b)
+BaseFilter.register("ni", lambda a, b: a not in b)
+BaseFilter.register("ha", lambda a, b: hasattr(a, "__iter__") and b in a)
+BaseFilter.register("ct", lambda a, b: a and b in a)
+BaseFilter.register("ci", lambda a, b: a and b.lower() in a.lower())
+BaseFilter.register("sw", lambda a, b: a.startswith(b))
+BaseFilter.register("si", lambda a, b: a.lower().startswith(b.lower()))
+BaseFilter.register("ew", lambda a, b: a.endswith(b))
+BaseFilter.register("ei", lambda a, b: a.lower().endswith(b.lower()))
+BaseFilter.register("bt", lambda a, b: b[0] <= a <= b[1])
 
 
-@dataclass
-class filters:  # 过滤器的别名与代理
-    LT = LessThanFilter  #
-    GT = GreaterThanFilter  #
-    EQ = EqualFilter  #
-    NE = NotEqualFilter  #
-    LE = LessThanEqualFilter  #
-    GE = GreaterThanEqualFilter  #
-    IN = InFilter  #
-    NI = NotInFilter  #
-    HA = ContainsFilter  #
-    CT = StringContainsFilter  #
-    CI = StringIContainsFilter  #
-    SW = StartsWithFilter  #
-    SI = IStartsWithFilter  #
-    EW = EndsWithFilter  #
-    EI = IEndsWithFilter  #
-    BT = DateBetweenFilter  #
-
-
-class SQLAlchemyBaseFilter(BaseFilter):
-    namespace = "sql"
-
+class SQLAlchemyFilter(BaseFilter):
+    filters = {}
+    
     def __init__(self, field=None, attribute=None, column=None):
         super().__init__(field=field, attribute=attribute)
         self.column = column
@@ -1482,28 +1460,28 @@ class SQLAlchemyBaseFilter(BaseFilter):
         if len(expressions) == 1:
             return query.filter(expressions[0])
         return query.filter(and_(*expressions))
-
-
-def sqlfilter_factory(name, func):
-    return type(name.upper(), (SQLAlchemyBaseFilter,), {'expression': lambda self,value:func(self.column,value),"name":name})
-
-
-SQLEqualFilter = sqlfilter_factory('eq', lambda c, v: c == v)
-SQLNotEqualFilter = sqlfilter_factory('ne', lambda c, v: c != v)
-SQLLessThanFilter = sqlfilter_factory('lt', lambda c, v: c < v)
-SQLLessThanEqualFilter = sqlfilter_factory('le', lambda c, v: c <= v)
-SQLGreaterThanFilter = sqlfilter_factory('gt', lambda c, v: c > v)
-SQLGreaterThanEqualFilter = sqlfilter_factory('ge', lambda c, v: c >= v)
-SQLInFilter = sqlfilter_factory('in', lambda c, v: c.in_(v) if len(v) else False)
-SQLNotInFilter = sqlfilter_factory('ni', lambda c, v: c.notin_(v) if len(v) else True)
-SQLContainsFilter = sqlfilter_factory('ha', lambda c, v: c.contains(v))
-SQLStringContainsFilter = sqlfilter_factory('ct', lambda c, v: c.like("%" + v.replace("%", "\\%") + "%"))
-SQLStringIContainsFilter = sqlfilter_factory('ci', lambda c, v: c.ilike("%" + v.replace("%", "\\%") + "%"))
-SQLStartsWithFilter = sqlfilter_factory('sw', lambda c, v: c.startswith(v.replace("%", "\\%")))
-SQLIStartsWithFilter = sqlfilter_factory('si', lambda c, v: c.ilike(v.replace("%", "\\%") + "%"))
-SQLEndsWithFilter = sqlfilter_factory('ew', lambda c, v: c.endswith(v.replace("%", "\\%")))
-SQLIEndsWithFilter = sqlfilter_factory('ei', lambda c, v: c.ilike("%" + v.replace("%", "\\%")))
-SQLDateBetweenFilter = sqlfilter_factory('bt', lambda c, v: c.between(v[0], v[1]))
+    
+    @classmethod
+    def make_filter(cls,name,func):
+        return type(name.upper(), (cls,), {'expression': lambda self,value:func(self.column,value),"name":name})
+        
+    
+SQLAlchemyFilter.register('eq', lambda c, v: c == v) # 隐式的创建过滤器
+SQLAlchemyFilter.register('ne', lambda c, v: c != v)
+SQLAlchemyFilter.register('lt', lambda c, v: c < v)
+SQLAlchemyFilter.register('le', lambda c, v: c <= v)
+SQLAlchemyFilter.register('gt', lambda c, v: c > v)
+SQLAlchemyFilter.register('ge', lambda c, v: c >= v)
+SQLAlchemyFilter.register('in', lambda c, v: c.in_(v) if len(v) else False)
+SQLAlchemyFilter.register('ni', lambda c, v: c.notin_(v) if len(v) else True)
+SQLAlchemyFilter.register('ha', lambda c, v: c.contains(v))
+SQLAlchemyFilter.register('ct', lambda c, v: c.like("%" + v.replace("%", "\\%") + "%"))
+SQLAlchemyFilter.register('ci', lambda c, v: c.ilike("%" + v.replace("%", "\\%") + "%"))
+SQLAlchemyFilter.register('sw', lambda c, v: c.startswith(v.replace("%", "\\%")))
+SQLAlchemyFilter.register('si', lambda c, v: c.ilike(v.replace("%", "\\%") + "%"))
+SQLAlchemyFilter.register('ew', lambda c, v: c.endswith(v.replace("%", "\\%")))
+SQLAlchemyFilter.register('ei', lambda c, v: c.ilike("%" + v.replace("%", "\\%")))
+SQLAlchemyFilter.register('bt', lambda c, v: c.between(v[0], v[1]))
 
 
 FIELD_FILTERS_DICT = {
@@ -2631,7 +2609,7 @@ class Manager:
             resource.schema.readable_fields,
             meta.filters,  # meta里面还有 filters= [x,y]指定了哪些字段可以用于过滤
             field_filters_dict=self.field_filters_dict,
-            filters_name_dict=self.base_filter.named_filters(),
+            filters_name_dict=self.base_filter.filters,
         )
         self.filters = {
             field_name: {name: self._init_filter(filter, name, fields[field_name], field_name) for (name, filter) in field_filters.items()} for (field_name, field_filters) in field_filters.items()
@@ -2893,7 +2871,7 @@ class RelationalManager(Manager):
 
 
 class SQLAlchemyManager(RelationalManager):
-    base_filter = SQLAlchemyBaseFilter
+    base_filter = SQLAlchemyFilter
     PAGINATION_TYPES = (Pagination, SAPagination)
 
     def __init__(self, resource, model):

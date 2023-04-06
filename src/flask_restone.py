@@ -14,15 +14,14 @@ from operator import attrgetter, itemgetter
 from types import MethodType
 
 import exrex
-
+from blinker import Namespace
 from faker import Faker
 from flasgger import swag_from
-from flask import _app_ctx_stack, _request_ctx_stack
 from flask import current_app, g, json, jsonify, make_response, request
-from blinker import Namespace
+from flask.globals import app_ctx, request_ctx
 from flask_principal import ItemNeed, Permission, RoleNeed, UserNeed
 from flask_sqlalchemy import Pagination as SAPagination
-from jsonschema import Draft4Validator, FormatChecker, ValidationError as _ValidationError
+from jsonschema import (Draft4Validator, FormatChecker,ValidationError as _ValidationError)
 from sqlalchemy import String as String_, and_, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
@@ -1800,16 +1799,14 @@ def camel_case(s):
 
 
 def route_from(url, method=None):
-    appctx = _app_ctx_stack.top
-    reqctx = _request_ctx_stack.top
-    if appctx is None:
+    if app_ctx is None:
         raise RuntimeError("Attempted to match a URL without the application context being pushed. This has to be executed when application context is available.")
-    if reqctx is not None:
-        url_adapter = reqctx.url_adapter
-    else:
-        url_adapter = appctx.url_adapter
-        if url_adapter is None:
-            raise RuntimeError("Application was not able to create a URL adapter for request independent URL matching. You might be able to fix this by setting the SERVER_NAME config variable.")
+
+    url_adapter = request_ctx.url_adapter if request_ctx else app_ctx.url_adapter
+
+    if url_adapter is None:
+        raise RuntimeError("Application was not able to create a URL adapter for request independent URL matching. You might be able to fix this by setting the SERVER_NAME config variable.")
+
     parsed_url = url_parse(url)
     if parsed_url.netloc not in ("", url_adapter.server_name):
         raise PageNotFound()

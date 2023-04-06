@@ -2605,8 +2605,9 @@ class Manager:
 
     def _init_filters(self, resource, meta):
         fields = resource.schema.fields
+        # fixed 将可读字段和可过滤字段区分，有的字段不可读但是可过滤
         field_filters = self.filters_for_fields(
-            resource.schema.readable_fields,
+            fields,
             meta.filters,  # meta里面还有 filters= [x,y]指定了哪些字段可以用于过滤
             field_filters_dict=self.field_filters_dict,
             filters_name_dict=self.base_filter.filters,
@@ -2624,9 +2625,10 @@ class Manager:
             for cls in (field.__class__,) + field.__class__.__bases__:  # 字段和其父类
                 if cls in field_filters_dict:
                     field_class_filters.update(field_filters_dict[cls])
-
-            field_filters = {name: filters_name_dict[name] for name in field_class_filters}
-
+        
+            field_filters = {name: filters_name_dict[name] for name in
+                             field_class_filters}
+        
             if isinstance(filters_expression, dict):
                 try:
                     field_expression = filters_expression[field_name]
@@ -2638,7 +2640,9 @@ class Manager:
                 if isinstance(field_expression, dict):  # 字段名下表达式还是字典
                     field_filters = field_expression
                 elif isinstance(field_expression, (list, tuple)):  # 如果是名称元组
-                    field_filters = {name: filter for (name, filter) in field_filters.items() if name in field_expression}
+                    field_filters = {name: filter for (name, filter) in
+                                     field_filters.items() if
+                                     name in field_expression}
                 elif field_expression is not True:
                     continue
             elif isinstance(filters_expression, (tuple, list)):  # 可以用的过滤器
@@ -2647,7 +2651,7 @@ class Manager:
                 continue
             elif filters_expression is not True:
                 continue
-            if field_filters:
+            if field_filters and 'r' in field.io:  # filters_expression 为True，只增加可读的
                 filters[field_name] = field_filters  # 某个字段的所有过滤器名的字典
         return filters
 

@@ -19,7 +19,7 @@ from faker import Faker
 from flasgger import swag_from
 from flask import _app_ctx_stack, _request_ctx_stack
 from flask import current_app, g, json, jsonify, make_response, request
-from flask.signals import Namespace
+from blinker import Namespace
 from flask_principal import ItemNeed, Permission, RoleNeed, UserNeed
 from flask_sqlalchemy import Pagination as SAPagination
 from jsonschema import Draft4Validator, FormatChecker, ValidationError as _ValidationError
@@ -191,13 +191,15 @@ class InvalidJSON(RestoneException):
 class InvalidFilter(RestoneException):
     status_code = 400
 
+
 class InvalidUrl(RestoneException):
     status_code = 400
-    
+
+
 class OpreationNotAllowed(RestoneException):
     status_code = 405
-  
-    
+
+
 class Forbidden(RestoneException):
     status_code = 403
 
@@ -1276,11 +1278,12 @@ class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新
     def example(self):
         schema = self.target.schema.response
         faker_data = self.faker()
-        for k,v in schema['properties'].items():
-            v['example'] = faker_data.get(k,"*")
+        for k, v in schema["properties"].items():
+            v["example"] = faker_data.get(k, "*")
         serializable_schema = json.loads(json.dumps(schema, default=str))
         return serializable_schema
-    
+
+
 class ToMany(Array):
     def __init__(self, resource, **kwargs):
         super().__init__(Inline(resource, nullable=False), **kwargs)
@@ -1369,7 +1372,6 @@ class Condition:  # 属性 过滤器 值
         return self.filter.op(get_value(self.attribute, item, None), self.value)
 
 
-    
 class BaseFilter(Schema):
     name = None
     filters = {}
@@ -1418,16 +1420,16 @@ class BaseFilter(Schema):
             "additionalProperties": False,
         }
 
-
     @classmethod
     def make_filter(cls, name, func):
         return type(name.upper(), (cls,), {"op": classmethod(lambda s, a, b: func(a, b)), "name": name})
-    
+
     @classmethod
-    def register(cls, name, func): # 类方法返回子类
-        class_ = cls.make_filter(name,func)
+    def register(cls, name, func):  # 类方法返回子类
+        class_ = cls.make_filter(name, func)
         cls.filters[name] = class_
-    
+
+
 # 属性过滤
 BaseFilter.register("lt", lambda a, b: a < b)
 BaseFilter.register("gt", lambda a, b: a > b)
@@ -1449,7 +1451,7 @@ BaseFilter.register("bt", lambda a, b: b[0] <= a <= b[1])
 
 class SQLAlchemyFilter(BaseFilter):
     filters = {}
-    
+
     def __init__(self, field=None, attribute=None, column=None):
         super().__init__(field=field, attribute=attribute)
         self.column = column
@@ -1460,28 +1462,28 @@ class SQLAlchemyFilter(BaseFilter):
         if len(expressions) == 1:
             return query.filter(expressions[0])
         return query.filter(and_(*expressions))
-    
+
     @classmethod
-    def make_filter(cls,name,func):
-        return type(name.upper(), (cls,), {'expression': lambda self,value:func(self.column,value),"name":name})
-        
-    
-SQLAlchemyFilter.register('eq', lambda c, v: c == v) # 隐式的创建过滤器
-SQLAlchemyFilter.register('ne', lambda c, v: c != v)
-SQLAlchemyFilter.register('lt', lambda c, v: c < v)
-SQLAlchemyFilter.register('le', lambda c, v: c <= v)
-SQLAlchemyFilter.register('gt', lambda c, v: c > v)
-SQLAlchemyFilter.register('ge', lambda c, v: c >= v)
-SQLAlchemyFilter.register('in', lambda c, v: c.in_(v) if len(v) else False)
-SQLAlchemyFilter.register('ni', lambda c, v: c.notin_(v) if len(v) else True)
-SQLAlchemyFilter.register('ha', lambda c, v: c.contains(v))
-SQLAlchemyFilter.register('ct', lambda c, v: c.like("%" + v.replace("%", "\\%") + "%"))
-SQLAlchemyFilter.register('ci', lambda c, v: c.ilike("%" + v.replace("%", "\\%") + "%"))
-SQLAlchemyFilter.register('sw', lambda c, v: c.startswith(v.replace("%", "\\%")))
-SQLAlchemyFilter.register('si', lambda c, v: c.ilike(v.replace("%", "\\%") + "%"))
-SQLAlchemyFilter.register('ew', lambda c, v: c.endswith(v.replace("%", "\\%")))
-SQLAlchemyFilter.register('ei', lambda c, v: c.ilike("%" + v.replace("%", "\\%")))
-SQLAlchemyFilter.register('bt', lambda c, v: c.between(v[0], v[1]))
+    def make_filter(cls, name, func):
+        return type(name.upper(), (cls,), {"expression": lambda self, value: func(self.column, value), "name": name})
+
+
+SQLAlchemyFilter.register("eq", lambda c, v: c == v)  # 隐式的创建过滤器
+SQLAlchemyFilter.register("ne", lambda c, v: c != v)
+SQLAlchemyFilter.register("lt", lambda c, v: c < v)
+SQLAlchemyFilter.register("le", lambda c, v: c <= v)
+SQLAlchemyFilter.register("gt", lambda c, v: c > v)
+SQLAlchemyFilter.register("ge", lambda c, v: c >= v)
+SQLAlchemyFilter.register("in", lambda c, v: c.in_(v) if len(v) else False)
+SQLAlchemyFilter.register("ni", lambda c, v: c.notin_(v) if len(v) else True)
+SQLAlchemyFilter.register("ha", lambda c, v: c.contains(v))
+SQLAlchemyFilter.register("ct", lambda c, v: c.like("%" + v.replace("%", "\\%") + "%"))
+SQLAlchemyFilter.register("ci", lambda c, v: c.ilike("%" + v.replace("%", "\\%") + "%"))
+SQLAlchemyFilter.register("sw", lambda c, v: c.startswith(v.replace("%", "\\%")))
+SQLAlchemyFilter.register("si", lambda c, v: c.ilike(v.replace("%", "\\%") + "%"))
+SQLAlchemyFilter.register("ew", lambda c, v: c.endswith(v.replace("%", "\\%")))
+SQLAlchemyFilter.register("ei", lambda c, v: c.ilike("%" + v.replace("%", "\\%")))
+SQLAlchemyFilter.register("bt", lambda c, v: c.between(v[0], v[1]))
 
 
 FIELD_FILTERS_DICT = {
@@ -1633,15 +1635,15 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         if self.required_fields is None:
             return result
         return self._filter_required(result)
-    
+
     def example(self):
-        schema = self.resource.schema.response # 此处是cache_property
+        schema = self.resource.schema.response  # 此处是cache_property
         faker_data = self.resource.schema.faker()
-        for k,v in schema['properties'].items():
-            v['example'] = faker_data.get(k,"*")
+        for k, v in schema["properties"].items():
+            v["example"] = faker_data.get(k, "*")
         serializable_schema = json.loads(json.dumps(schema, default=str))
         return {"type": "array", "items": serializable_schema}
-    
+
     def _filter_required(self, result):
         out = []
         for item in result:
@@ -1994,10 +1996,10 @@ class Route:
             return response_schema.example()
         elif isinstance(self.response_schema, BaseField):
             response_schema = self.response_schema.response
-            response_schema['example'] = self.response_schema.faker()
+            response_schema["example"] = self.response_schema.faker()
             return response_schema
         return {}
-    
+
     def rule_factory(self, resource, relative=False):  # 规则工厂
         rule = self.rule  # 规则是个字符串
         if rule is None:
@@ -2337,10 +2339,10 @@ class ModelResourceMeta(ResourceMeta):
         if sort_attribute is not None and isinstance(sort_attribute, str):
             meta.sort_attribute = (sort_attribute, False)
         # 预绑定信号接收函数
-        for name,signal in _signals.items():
+        for name, signal in _signals.items():
             receiver_name = f"on_{name.replace('-','_')}"
             if receiver_name in members:
-                signal.connect(members[receiver_name],class_)
+                signal.connect(members[receiver_name], class_)
         return class_
 
 
@@ -2406,25 +2408,25 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         self.manager.delete_by_id(id)
         return None, 204
 
-    @Route.PATCH("", rel="patch",schema=RFC6902_PATCH)
+    @Route.PATCH("", rel="patch", schema=RFC6902_PATCH)
     def patch(self):
         """
         根据 RFC 6902 规范执行指定路径下资源的操作。
-        
+
         Args:
             patch: RFC6902_PATCH 对象，包含一组操作。
-            
+
         Raises:
             OpreationNotAllowed: 如果指定的操作不在允许的操作列表中，则引发此异常。
             InvalidUrl: 如果指定的路径不存在，则引发此异常。
             OpreationNotAllowed: 如果指定的操作被允许但未实现，则引发此异常。
             InvalidJSON: 如果参数值不是预期的格式，则引发此异常。
             AssertionError: 如果指定路径对应的值与参数值不匹配，则引发此异常。
-            
+
         Returns:
             无返回值，HTTP状态码为204。
         """
-        patch = request.json # 以列表形式提供不具名
+        patch = request.json  # 以列表形式提供不具名
         for p in patch:
             op = p.pop("op")  # 可用操作
             if op not in self.meta.allowed_opreations:
@@ -2433,7 +2435,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
             if not self.path_exists(path):
                 raise InvalidUrl(f"{path} not found")
             value = p.pop("value", None)  # 可选参数值
-            func = getattr(self, op,None)
+            func = getattr(self, op, None)
             if func is None:
                 raise OpreationNotAllowed(f"{op} is allowed but not implemented")
             func(path, value)
@@ -2443,84 +2445,84 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
 
     def is_root_path(self, path):
         return path == "/"
-    
-    def is_item_path(self,path):
-        return path[0]=="/" and path.strip("/").count("/")==0
-    
-    def is_attr_path(self,path):
-        return path[0]=="/" and path.strip("/").count("/")==1
-    
+
+    def is_item_path(self, path):
+        return path[0] == "/" and path.strip("/").count("/") == 0
+
+    def is_attr_path(self, path):
+        return path[0] == "/" and path.strip("/").count("/") == 1
+
     def path_exists(self, path: str) -> bool:
         """判断路径是否存在,目前只支持三级"""
         if self.is_root_path(path):
             return True
         parts = path.rstrip("/").split("/")
-    
+
         try:
             item = self.manager.read(parts[1])
         except ItemNotFound:
             return False
         if len(parts) == 2:
             return True
-        if hasattr(item,parts[2]):
+        if hasattr(item, parts[2]):
             return True
         return False
 
-    def add(self,path,value):
+    def add(self, path, value):
         if self.is_root_path(path):
-            return self.manager.create(value,commit=False)
+            return self.manager.create(value, commit=False)
         raise InvalidUrl("add only support root path")
-    
-    def replace(self,path,value):
+
+    def replace(self, path, value):
         if self.is_item_path(path):
             item = self.manager.read(path[1:])
-            return self.manager.update(item,value,commit=False)
+            return self.manager.update(item, value, commit=False)
         elif self.is_attr_path(path):
-            id_,attr = path.strip("/").split("/")
+            id_, attr = path.strip("/").split("/")
             item = self.manager.read(id_)
-            return self.manager.update(item, {attr:value},commit=False)
+            return self.manager.update(item, {attr: value}, commit=False)
         raise InvalidUrl("replace not support root path")
-    
-    def remove(self,path,value=None): # soft delete elegant delete hard delete
+
+    def remove(self, path, value=None):  # soft delete elegant delete hard delete
         if self.is_item_path(path):
             item = self.manager.read(path[1:])
-            return self.manager.delete(item,commit=False)
+            return self.manager.delete(item, commit=False)
         raise InvalidUrl("remove only support item path")
-        
-    def move(self,path,value):
+
+    def move(self, path, value):
         if self.is_item_path(path):
             item = self.manager.read(path[1:])
             id_attribute = self.meta.id_attribute or "id"
-            if isinstance(value,str) and self.is_item_path(value) and not self.path_exists(value):
-                return self.manager.update(item, {id_attribute:value[1:]},commit=False) #todo 兼顾不同类型id
-            elif isinstance(value,dict): # 可能有其他属性表示资源实体路径
-                return self.manager.update(item,value,commit=False)
+            if isinstance(value, str) and self.is_item_path(value) and not self.path_exists(value):
+                return self.manager.update(item, {id_attribute: value[1:]}, commit=False)  # todo 兼顾不同类型id
+            elif isinstance(value, dict):  # 可能有其他属性表示资源实体路径
+                return self.manager.update(item, value, commit=False)
             raise InvalidJSON("value must be path string or object")
         raise InvalidUrl("move only support item path")
-    
-    def copy(self,path,value=None):
+
+    def copy(self, path, value=None):
         if self.is_item_path(path):
             item = self.manager.read(path[1:])
             props = vars(item)
             props.pop("id")
             props.pop("_sa_instance_state")
-            if isinstance(value,dict):
+            if isinstance(value, dict):
                 props.update(value)  # copy 并更新数据
-            return self.manager.create(props,commit=False)  # copy
+            return self.manager.create(props, commit=False)  # copy
         raise InvalidUrl("copy only support item path")
-    
-    def test(self,path,value):
+
+    def test(self, path, value):
         # 此处的test实际上是测试路径对应的值是否与value相同
         if self.is_attr_path(path):
             id_, attr = path.strip("/").split("/")
             item = self.manager.read(id_)
-            if not hasattr(item,attr):
+            if not hasattr(item, attr):
                 raise InvalidUrl(f"{path} not found")
-            if getattr(item,attr) != value:
+            if getattr(item, attr) != value:
                 raise AssertionError(f"{path} does not match {value}")
             return None
         raise InvalidUrl("test only support attr path")
-    
+
     class Schema:  # 设置各个字段的语法用的
         pass
 
@@ -2546,8 +2548,6 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         key_converters = (RefKey(), IDKey())
         datetime_formatter = DateTime
         natural_key = None
-
-
 
 
 class Pagination:
@@ -2630,10 +2630,9 @@ class Manager:
             for cls in (field.__class__,) + field.__class__.__bases__:  # 字段和其父类
                 if cls in field_filters_dict:
                     field_class_filters.update(field_filters_dict[cls])
-        
-            field_filters = {name: filters_name_dict[name] for name in
-                             field_class_filters}
-        
+
+            field_filters = {name: filters_name_dict[name] for name in field_class_filters}
+
             if isinstance(filters_expression, dict):
                 try:
                     field_expression = filters_expression[field_name]
@@ -2645,9 +2644,7 @@ class Manager:
                 if isinstance(field_expression, dict):  # 字段名下表达式还是字典
                     field_filters = field_expression
                 elif isinstance(field_expression, (list, tuple)):  # 如果是名称元组
-                    field_filters = {name: filter for (name, filter) in
-                                     field_filters.items() if
-                                     name in field_expression}
+                    field_filters = {name: filter for (name, filter) in field_filters.items() if name in field_expression}
                 elif field_expression is not True:
                     continue
             elif isinstance(filters_expression, (tuple, list)):  # 可以用的过滤器
@@ -2656,7 +2653,7 @@ class Manager:
                 continue
             elif filters_expression is not True:
                 continue
-            if field_filters and 'r' in field.io:  # filters_expression 为True，只增加可读的
+            if field_filters and "r" in field.io:  # filters_expression 为True，只增加可读的
                 filters[field_name] = field_filters  # 某个字段的所有过滤器名的字典
         return filters
 
@@ -3510,20 +3507,23 @@ HTTP_VERBS_CN = {
     "update": "修改{}",
 }
 
-def get_description(resource,name):
-    field = resource.schema.fields.get(name,None)
+
+def get_description(resource, name):
+    field = resource.schema.fields.get(name, None)
     if field and field.description:
         return field.description
-    model_field = getattr(resource.meta.model,name,None)
+    model_field = getattr(resource.meta.model, name, None)
     if model_field and model_field.info:
         return model_field.info
     return name
 
-def get_example(resource,name):
+
+def get_example(resource, name):
     field = resource.schema.fields.get(name, None)
     if field:
         return field.faker()
     return name
+
 
 def schema_to_swag_dict(route, resource):
     schema = route.schema_factory(resource)
@@ -3534,19 +3534,12 @@ def schema_to_swag_dict(route, resource):
     rel_cn = HTTP_VERBS_CN.get(rel, None)
     title = rel_cn.format(tags[0]) if rel_cn else rel
     summary = route.description or title
-    flasgger_dict = {"summary": summary,
-                     "tags": tags or [],
-                     "parameters": [],
-                     "responses": {"200": {"description": "success", "examples": ""}}}
+    flasgger_dict = {"summary": summary, "tags": tags or [], "parameters": [], "responses": {"200": {"description": "success", "examples": ""}}}
 
     _schema = schema.get("schema", {})
 
     if "{id}" in href:
-        parameter = {"in": "path",
-                     "name": "id",
-                     "type": "string",
-                     "required": True,
-                     "description": f"the ID of the {resource.meta.name}"}
+        parameter = {"in": "path", "name": "id", "type": "string", "required": True, "description": f"the ID of the {resource.meta.name}"}
         flasgger_dict["parameters"].append(parameter)
 
     if method == "GET":
@@ -3555,30 +3548,26 @@ def schema_to_swag_dict(route, resource):
             parameter = {
                 "name": prop,
                 "in": "query",
-                "type": details.get("type", "string") if details.get(
-                    "type") != "null" else "string",
+                "type": details.get("type", "string") if details.get("type") != "null" else "string",
                 "required": prop in required_props,
                 "description": details.get("description", ""),
             }
             if prop == "where":
-                parameter[
-                    "description"] = '过滤条件,格式如{field:{"$op":value}},' + \
-                                     f'当前field有{resource.meta.filters}' + \
-                                     "其中op可以是eq|ne|lt|le|gt|ge|si|sw|ei|ew|cw|ct等." \
-                                     "特例，如果是等于关系可省去$eq,如{field:value}，" \
-                                     "如果是模糊查询可不指定字段，而使用$like,如{$like:value}"
+                parameter["description"] = (
+                    '过滤条件,格式如{field:{"$op":value}},' + f"当前field有{resource.meta.filters}" + "其中op可以是eq|ne|lt|le|gt|ge|si|sw|ei|ew|cw|ct等."
+                    "特例，如果是等于关系可省去$eq,如{field:value}，"
+                    "如果是模糊查询可不指定字段，而使用$like,如{$like:value}"
+                )
             elif prop == "sort":
-                parameter[
-                    "description"] = '排序条件,格式如{"name":true,"age":false} 表示按name降序,按age升序'
+                parameter["description"] = '排序条件,格式如{"name":true,"age":false} 表示按name降序,按age升序'
             elif prop == PAGE:
                 parameter["description"] = "分页页码,默认为 1"
             elif prop == PER_PAGE:
-                parameter[
-                    "description"] = f"每页数量,默认为{DEFAULT_PER_PAGE},最大值为{MAX_PER_PAGE}"
+                parameter["description"] = f"每页数量,默认为{DEFAULT_PER_PAGE},最大值为{MAX_PER_PAGE}"
             flasgger_dict["parameters"].append(parameter)
 
         # if rel in ("self","instances"):
-            # 获取输出样例
+        # 获取输出样例
         response_schema = route.response_example(resource)
         flasgger_dict["responses"]["200"] = {"description": "success", "schema": response_schema}
 
@@ -3591,13 +3580,16 @@ def schema_to_swag_dict(route, resource):
             request_schema = route.request_schema.request if route.request_schema else {}
 
         for k, v in request_schema.get("properties", {}).items():
-            v['description'] = get_description(resource, k)
-            v['example'] = get_example(resource, k)
+            v["description"] = get_description(resource, k)
+            v["example"] = get_example(resource, k)
 
-        flasgger_dict["parameters"].append({"in": "body",
-                                            "name": "Item",
-                                            "schema": request_schema,
-                                            })
+        flasgger_dict["parameters"].append(
+            {
+                "in": "body",
+                "name": "Item",
+                "schema": request_schema,
+            }
+        )
 
         flasgger_dict["responses"]["200"] = {"description": "success", "examples": '{"result":"success"}'}
 
@@ -3776,8 +3768,9 @@ OPERATORS = {
     "$si": "str.startswith",
     "$ew": "str.endswith",
     "$ei": "str.endswith",
-    "$bt": "between"
+    "$bt": "between",
 }
+
 
 def construct_query(filter_dict):
     """
@@ -3806,6 +3799,7 @@ def construct_query(filter_dict):
         return f"{field}.astype('str').{operator}('{threshold}')"
     return f"{field} {operator} {threshold}"
 
+
 class DataFrameManager:
     READ_CHUNK_SIZE = 50000
     WRITE_CHUNK_SIZE = 50000
@@ -3818,6 +3812,7 @@ class DataFrameManager:
     @classmethod
     def load(cls, path, **kwargs):
         import pandas as pd
+
         data_list = []
         with pd.read_csv(path, chunksize=cls.READ_CHUNK_SIZE, **kwargs) as reader:
             for chunk in reader:
@@ -3826,14 +3821,13 @@ class DataFrameManager:
         return dataframe
 
     @classmethod
-    def save(cls,dataframe, path, **kwargs):
+    def save(cls, dataframe, path, **kwargs):
         dataframe.to_csv(path, chunksize=cls.WRITE_CHUNK_SIZE, mode="w", index=False, **kwargs)
 
     def commit(self):
-        self.save(self.dataframe,self.path)
+        self.save(self.dataframe, self.path)
 
-
-    def preview(self,row_page, row_perpage, col_page, col_perpage):
+    def preview(self, row_page, row_perpage, col_page, col_perpage):
         """
         对于特别大的表可以按照行和列双向翻页
         :param row_page: 当前行页码
@@ -3850,7 +3844,7 @@ class DataFrameManager:
         data = df.iloc[row_start:row_end, col_start:col_end]
         return data.to_json(orient="split")
 
-    def paginated_instances(self, page, per_page, where=None, sort=None,options=None):
+    def paginated_instances(self, page, per_page, where=None, sort=None, options=None):
         """
         分页查询方法。接受以下参数：
         - page: 当前页码。
@@ -3874,16 +3868,16 @@ class DataFrameManager:
             where = construct_query(where)
             df = df.query(where)
         if sort is not None:
-            df = df.sort_values(by=list(sort.keys()),ascending=list(sort.values()))
+            df = df.sort_values(by=list(sort.keys()), ascending=list(sort.values()))
         if options is not None:
             df = df.filter(items=options)
-        return df.to_dict(orient='records')
+        return df.to_dict(orient="records")
 
     def columns(self):
         df = self.dataframe
         return df.columns.tolist()
 
-    def count(self,where=None):
+    def count(self, where=None):
         df = self.dataframe
         if where is not None:
             where = construct_query(where)

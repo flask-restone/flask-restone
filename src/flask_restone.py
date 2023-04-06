@@ -2336,6 +2336,11 @@ class ModelResourceMeta(ResourceMeta):
         sort_attribute = meta.get("sort_attribute")
         if sort_attribute is not None and isinstance(sort_attribute, str):
             meta.sort_attribute = (sort_attribute, False)
+        # 预绑定信号接收函数
+        for name,signal in _signals.items():
+            receiver_name = f"on_{name.replace('-','_')}"
+            if receiver_name in members:
+                signal.connect(members[receiver_name],class_)
         return class_
 
 

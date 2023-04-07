@@ -494,6 +494,12 @@ class BaseField(Schema):
         self.description = description  # 描述,可以用中文
         self.io = io  # 读写
 
+    
+    def __class_getitem__(cls, item):
+        if isinstance(item, tuple):
+            return cls(*item)
+        return cls(item)
+    
     def _finalize_schema(self, schema, io):  # 单个字典
         schema = dict(schema)
         if self.io == "r" and "r" in io:
@@ -689,11 +695,9 @@ class String(BaseField):
 
 
 class UUID(String):
-    UUID_REGEX = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-
     def __init__(self, **kwargs):
-        super().__init__(min_length=36, max_length=36, pattern=self.UUID_REGEX, **kwargs)
-
+        super().__init__(format="uuid", **kwargs)
+        
 
 class Path(String):
     def __init__(self, level=1, **kwargs):

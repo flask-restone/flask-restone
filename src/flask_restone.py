@@ -673,7 +673,7 @@ class String(BaseField):
             if v is not None:
                 schema[k] = v
         super().__init__(schema, **kwargs)
-
+    
     def faker(self):
         enum = self.response.get("enum", None)
         if enum:
@@ -694,25 +694,41 @@ class String(BaseField):
         return "x" * random.randint(min_length, max_length)
 
 
-class UUID(String):
-    def __init__(self, **kwargs):
-        super().__init__(format="uuid", **kwargs)
+class FormatString(String):
+    _format = None
+    def __init__(self,**kwargs):
+        super().__init__(format=self._format,**kwargs)
+        
+def from_format(format):
+    return type(format,(FormatString,),{"_format":format})
+
+UUID = from_format("uuid")
+Uri = from_format("uri")
+Email = from_format("email")
+ipv4 = from_format("ipv4")
+
+class EnumString(String):
+    def __init__(self,*args,sperator="|",**kwargs):
+        if len(args)>1:
+            args = list(args)
+        elif len(args)==1:
+            args = args[0].split(sperator)
+        else:
+            raise ValueError("Enum Args Lost")
+        super().__init__(enum=args,**kwargs)
         
 
-class Path(String):
-    def __init__(self, level=1, **kwargs):
-        pattern = "/[\w]+" * level
-        super().__init__(pattern=pattern, **kwargs)
+class PatternString(String):
+    _pattern = None
+    def __init__(self,pattern=None,**kwargs):
+        pat = pattern or self._pattern
+        if pat is None:
+            raise ValueError("Pattern is None")
+        super().__init__(pattern=pat, **kwargs)
 
 
-class Uri(String):
-    def __init__(self, **kwargs):
-        super().__init__(format="uri", **kwargs)
-
-
-class Email(String):
-    def __init__(self, **kwargs):
-        super().__init__(format="email", **kwargs)
+def from_pattern(pattern,name):
+    return type(name,(PatternString,),{"_pattern":pattern})
 
 
 class Date(BaseField):
@@ -860,7 +876,7 @@ class AnyOf(BaseField):
     """
 
     def __init__(self, *subschemas, **kwargs):
-        self.subschemas = list(subschemas)
+        self.subschemas = [_field_from_object(self,sub) for sub in subschemas]
         # for subschema in subschemas:
         #     if not isinstance(subschema, BaseField):
         #         raise ValueError("All subschemas must be instances of BaseField")
@@ -957,6 +973,12 @@ class Object(BaseField, ResourceMixin):
         pattern=None,  # 正则表达式
         pattern_props=None,
         other_props=None,
+        io="rw",
+        default=None,
+        attribute=None,
+        nullable=False,
+        title=None,
+        description=None,
         **kwargs,
     ):
         if isinstance(properties, str):  # todo 优化这里的逻辑，目前是只能展示不能校验
@@ -966,7 +988,11 @@ class Object(BaseField, ResourceMixin):
         self.properties = None
         self.pattern_props = None
         self.other_props = None
-        if isinstance(properties, dict):  # proprerties 是键名和字段的字典
+        
+        if properties is None and kwargs:
+            self.properties = {k:_field_from_object(self,v) for k,v in kwargs.items() if isinstance(v,(type,BaseField))}
+            
+        elif isinstance(properties, dict):  # proprerties 是键名和字段的字典
             self.properties = properties  # 如果不给字典，就没有这个属性
         elif isinstance(properties, (type, BaseField)):  # 类或字段
             field = _field_from_object(self, properties)
@@ -1002,7 +1028,8 @@ class Object(BaseField, ResourceMixin):
 
         if self.pattern_props and (len(self.pattern_props) > 1 or self.other_props):
             raise NotImplementedError("Only one pattern property is currently supported and it cannot be combined with additionalProperties")
-        super().__init__(schema, **kwargs)
+        
+        super().__init__(schema, io=io, default=default, attribute=attribute, nullable=nullable, title=title, description=description)
 
     def bind(self, resource):
         # 满足某个模式的字段都用一个字段类，比如 {{".*_time":DateTime}}
@@ -1339,7 +1366,7 @@ class fields:  # noqa
     AnyOf = AnyOf
     String = String
     UUID = UUID
-    Path = Path
+
     Uri = Uri
     Email = Email
     Date = Date

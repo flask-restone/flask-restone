@@ -21,7 +21,7 @@ from flask import current_app, g, json, jsonify, make_response, request
 from flask.globals import app_ctx, request_ctx
 from flask_principal import ItemNeed, Permission, RoleNeed, UserNeed
 from flask_sqlalchemy import Pagination as SAPagination
-from jsonschema import (Draft4Validator, FormatChecker,ValidationError as _ValidationError)
+from jsonschema import Draft4Validator, FormatChecker, ValidationError as _ValidationError
 from sqlalchemy import String as String_, and_, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
@@ -494,12 +494,11 @@ class BaseField(Schema):
         self.description = description  # 描述,可以用中文
         self.io = io  # 读写
 
-    
     def __class_getitem__(cls, item):
         if isinstance(item, tuple):
             return cls(*item)
         return cls(item)
-    
+
     def _finalize_schema(self, schema, io):  # 单个字典
         schema = dict(schema)
         if self.io == "r" and "r" in io:
@@ -673,7 +672,7 @@ class String(BaseField):
             if v is not None:
                 schema[k] = v
         super().__init__(schema, **kwargs)
-    
+
     def faker(self):
         enum = self.response.get("enum", None)
         if enum:
@@ -694,41 +693,55 @@ class String(BaseField):
         return "x" * random.randint(min_length, max_length)
 
 
+Str = String
+
+
 class FormatString(String):
     _format = None
-    def __init__(self,**kwargs):
-        super().__init__(format=self._format,**kwargs)
-        
+
+    def __init__(self, **kwargs):
+        super().__init__(format=self._format, **kwargs)
+
+
 def from_format(format):
-    return type(format,(FormatString,),{"_format":format})
+    return type(format, (FormatString,), {"_format": format})
+
 
 UUID = from_format("uuid")
 Uri = from_format("uri")
 Email = from_format("email")
 ipv4 = from_format("ipv4")
 
+
 class EnumString(String):
-    def __init__(self,*args,sperator="|",**kwargs):
-        if len(args)>1:
+    def __init__(self, *args, sperator="|", **kwargs):
+        if len(args) > 1:
             args = list(args)
-        elif len(args)==1:
+        elif len(args) == 1:
             args = args[0].split(sperator)
         else:
             raise ValueError("Enum Args Lost")
-        super().__init__(enum=args,**kwargs)
-        
+        super().__init__(enum=args, **kwargs)
+
+
+ES = EnumString
+
 
 class PatternString(String):
     _pattern = None
-    def __init__(self,pattern=None,**kwargs):
+
+    def __init__(self, pattern=None, **kwargs):
         pat = pattern or self._pattern
         if pat is None:
             raise ValueError("Pattern is None")
         super().__init__(pattern=pat, **kwargs)
 
 
-def from_pattern(pattern,name):
-    return type(name,(PatternString,),{"_pattern":pattern})
+PS = PatternString
+
+
+def from_pattern(pattern, name):
+    return type(name, (PatternString,), {"_pattern": pattern})
 
 
 class Date(BaseField):
@@ -814,6 +827,9 @@ class Boolean(BaseField):
         return random.choice([True, False])
 
 
+Bool = Boolean
+
+
 class Integer(BaseField):
     url_rule_converter = "int"
 
@@ -832,6 +848,9 @@ class Integer(BaseField):
         minimum = self.response.get("minimum", 1)
         maximum = self.response.get("maximum", 100)
         return random.randint(minimum, maximum)
+
+
+Int = Integer
 
 
 class Number(BaseField):
@@ -869,6 +888,9 @@ class Number(BaseField):
         return random.randint(minimum * 100, maximum * 100) / 100
 
 
+Float = Number
+
+
 class AnyOf(BaseField):
     """anyOf关键字表示一个模式可以匹配多个模式中的任意一个，
     即任意一个模式匹配成功，则整个模式匹配成功。
@@ -876,7 +898,7 @@ class AnyOf(BaseField):
     """
 
     def __init__(self, *subschemas, **kwargs):
-        self.subschemas = [_field_from_object(self,sub) for sub in subschemas]
+        self.subschemas = [_field_from_object(self, sub) for sub in subschemas]
         # for subschema in subschemas:
         #     if not isinstance(subschema, BaseField):
         #         raise ValueError("All subschemas must be instances of BaseField")
@@ -884,6 +906,9 @@ class AnyOf(BaseField):
 
     def faker(self):
         return random.choice(self.subschemas).faker()
+
+
+Union = AnyOf
 
 
 def _field_from_object(parent, schema):  # 从对象获取字段
@@ -940,6 +965,19 @@ class Array(BaseField, ResourceMixin):
         return [self.container.faker() for _ in range(self.response.get("minItems", 2))]
 
 
+List = Array
+
+class Tuple(BaseField):
+    """表示固定长度的列表元组"""
+    def __init__(self,*schemas,**kwargs):
+        schemas = [_field_from_object(self,item) for item in schemas]
+        count = len(schemas)
+        schema = {"type":"array",
+                  "items":[schema.response for schema in schemas],
+                  "minItems":count,
+                  "maxItems":count}
+        super().__init__(schema,**kwargs)
+        
 class Object(BaseField, ResourceMixin):
     """
     在 JSON Schema 中，'patternProperties'是一个关键字，用于描述对象属性的模式。
@@ -988,10 +1026,10 @@ class Object(BaseField, ResourceMixin):
         self.properties = None
         self.pattern_props = None
         self.other_props = None
-        
+
         if properties is None and kwargs:
-            self.properties = {k:_field_from_object(self,v) for k,v in kwargs.items() if isinstance(v,(type,BaseField))}
-            
+            self.properties = {k: _field_from_object(self, v) for k, v in kwargs.items() if isinstance(v, (type, BaseField))}
+
         elif isinstance(properties, dict):  # proprerties 是键名和字段的字典
             self.properties = properties  # 如果不给字典，就没有这个属性
         elif isinstance(properties, (type, BaseField)):  # 类或字段
@@ -1028,8 +1066,33 @@ class Object(BaseField, ResourceMixin):
 
         if self.pattern_props and (len(self.pattern_props) > 1 or self.other_props):
             raise NotImplementedError("Only one pattern property is currently supported and it cannot be combined with additionalProperties")
-        
+
         super().__init__(schema, io=io, default=default, attribute=attribute, nullable=nullable, title=title, description=description)
+
+    def __class_getitem__(cls, item):
+        """
+        1. Dict["self"]  # 表对自己的引用
+        2. Dict["pattern",Field] # 表示键要符合正则表达式
+        4. Dict["k1":Str,"k2":Int,"k3":Dict["self"]]
+
+        :param item:
+        :type item:
+        :return:
+        :rtype:
+        """
+        if isinstance(item, str):
+            return cls(item)
+
+        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str):
+            return cls(properties=item[1], pattern=item[0])
+
+        if isinstance(item, tuple) and all(isinstance(i, slice) for i in item):
+            properties = {}
+            for index in item:
+                key, value, step = index.start, index.stop, index.step
+                properties[key] = _field_from_object(cls, value)
+            return cls(properties=properties)
+        return cls(item)
 
     def bind(self, resource):
         # 满足某个模式的字段都用一个字段类，比如 {{".*_time":DateTime}}
@@ -1090,6 +1153,9 @@ class Object(BaseField, ResourceMixin):
         if self.properties:
             output = {k: f().faker() if isinstance(f, type) else f.faker() for (k, f) in self.properties.items()}
         return output
+
+
+Dict = Object
 
 
 class AttributeMapped(Object):
@@ -1389,6 +1455,7 @@ class fields:  # noqa
     Bool = Boolean
     List = Array
     Dict = Object
+    Union = AnyOf
 
 
 # -------------------过滤器-------------------------------------
@@ -1921,7 +1988,7 @@ class Route:
 
         annotations = getattr(view_func, "__annotations__", None)  # 获取视图函数的注解
         if isinstance(annotations, dict) and annotations:
-            self.request_schema = FieldSet({name: field for (name, field) in annotations.items() if name != "return"})  # 请求的语法就是参数名和参数字段类型的字段集，响应也有字段
+            self.request_schema = FieldSet({name: _field_from_object(self, field) for (name, field) in annotations.items() if name != "return"})  # 请求的语法就是参数名和参数字段类型的字段集，响应也有字段
             self.response_schema = annotations.get("return", response_schema)
         else:  # 没有标注则要指定参数
             self.request_schema = schema

@@ -611,41 +611,69 @@ class Custom(BaseField):  # 自定义字段
         return self._converter(value)
 
 
+class Optional(BaseField):
+    def __init__(self, schema, **kwargs):
+        super().__init__(schema, nullable=True, **kwargs)
+
+
 class String(BaseField):
     """
     JSON Schema的string类型的format包括：
 
     date-time：日期时间格式，如：2018-11-13T20:20:39+00:00
-
     date：日期格式，如：2018-11-13
-
     time：时间格式，如：20:20:39+00:00
-
     email：电子邮件地址格式，如：user@example.com
-
     idn-email：国际化电子邮件地址格式，如：user@示例.公司
-
     hostname：主机名格式，如：example.com
-
     idn-hostname：国际化主机名格式，如：示例.公司
-
     ipv4：IPv4地址格式，如：192.0.2.1
-
     ipv6：IPv6地址格式，如：2001:0db8:85a3:0000:0000:8a2e:0370:7334
-
     uri：URI格式，如：https://example.com/path/to/resource
-
     uri-reference：URI引用格式，如：/path/to/resource
-
     uri-template：URI模板格式，如：/path/{id}
-
     json-pointer：JSON指针格式，如：/path/to/property
-
     relative-json-pointer：相对JSON指针格式，如：2/property
-
     regex：正则表达式格式，如：^[a-z]+$
-
     uuid：UUID格式，如：123e4567-e89b-12d3-a456-426655440000
+
+    特别的:
+        Str[0:6] 表示长度为0到6的string
+        Str[6] 表示长度为6的string
+        Str[6:] 表示最小长度为6
+        Str[:6,"default"] 表示最大长度为6
+
+        Re["\d{2}"] 表示符合正则表达式的
+        Enum["a|b|c|d"] 表示枚举的
+        Literal["a","b"] 表示字面量
+
+        Int[5:100] 表示5到100之间
+        Int[1:...] 表示1 到正无穷
+        Int[...:0] 表示负无穷到0
+        Int[32] 表示默认为 32
+
+        Bool[1] 表示默认为True
+        Bool[0] 表示默认为False
+
+        Float[0:1,0.5] 表示0到1之间默认0.5（包括0和1)
+        Float[0:1:01,0.5] 表示0,1之间,01 表示左开右闭,10表示左闭右开,11表示左闭右闭,00表示左开右开
+        Float[0:,0.5] 表示0到无穷之间默认0.5
+        Float[:-2,-5] 表示负无穷到-2之间默认0.5
+
+        List[Int,1:5] 表示内容为 Int，长度为1:5的列表
+        List[Int,5] 表示内容为 Int，长度为5的列表
+        List[Int] 表示内容为 Int 的列表
+
+        Tuple[Str,Int] 表示内容为 Str,Int，固定长度为2 的元组列表
+
+        Dict["self"]  # 表对自己的引用
+        Dict["pattern",Field] # 表示键要符合正则表达式
+        Dict["k1":Str,"k2":Int,"k3":Dict["self"]]
+
+        Union[Str,Int,Float] # 表示或的关系
+
+
+
     """
 
     url_rule_converter = "string"
@@ -685,6 +713,8 @@ class String(BaseField):
         format = self.response.get("format", None)
         if format and hasattr(_faker, format):
             return getattr(_faker, format)()
+        elif format == "uuid":
+            return _faker.uuid4()
         default = self.response.get("default", None)
         if default is not None:
             return default
@@ -693,10 +723,22 @@ class String(BaseField):
         return "x" * random.randint(min_length, max_length)
 
 
-Str = String
+class Str(String):
+    def __class_getitem__(cls, item):
+        if isinstance(item, slice):
+            min_length, max_length, _ = item.start, item.stop, item.step
+            return cls(min_length, max_length)
+        elif isinstance(item, tuple) and len(item) == 2:
+            if isinstance(item[0], slice) and isinstance(item[1], str):
+                return cls(item[0].start, item[0].stop, default=item[1])
+        elif isinstance(item, int) and item >= 0:
+            return cls(item, item)
+        elif isinstance(item, str):
+            return cls(default=item)
+        raise KeyError(f"Key {item} not Support")
 
 
-class FormatString(String):
+class FormatString(String):  # 有限的只能预定义好
     _format = None
 
     def __init__(self, **kwargs):
@@ -710,7 +752,8 @@ def from_format(format):
 UUID = from_format("uuid")
 Uri = from_format("uri")
 Email = from_format("email")
-ipv4 = from_format("ipv4")
+Ipv4 = from_format("ipv4")
+Ipv6 = from_format("ipv6")
 
 
 class EnumString(String):
@@ -726,10 +769,6 @@ class EnumString(String):
 
 ES = EnumString
 Literal = EnumString
-
-class Optional(BaseField):
-    def __init__(self,schema,**kwargs):
-        super().__init__(schema,nullable=True,**kwargs)
 
 
 class PatternString(String):
@@ -831,8 +870,9 @@ class Boolean(BaseField):
     def faker(self):
         return random.choice([True, False])
 
-
-Bool = Boolean
+class Bool(Boolean):
+    def __class_getitem__(cls, item):
+        return cls(default=bool(item))
 
 
 class Integer(BaseField):
@@ -855,7 +895,17 @@ class Integer(BaseField):
         return random.randint(minimum, maximum)
 
 
-Int = Integer
+class Int(Integer):
+    def __class_getitem__(cls, item):
+        if isinstance(item, slice):
+            minimum, maximum, _ = item.start, item.stop, item.step
+            return cls(minimum, maximum)
+        elif isinstance(item, tuple) and len(item) == 2:
+            if isinstance(item[0], slice) and isinstance(item[1], int):
+                return cls(item[0].start, item[0].stop, default=item[1])
+        elif isinstance(item, int):
+            return cls(default=item)
+        raise KeyError(f"Key {item} not Support")
 
 
 class Number(BaseField):
@@ -893,7 +943,21 @@ class Number(BaseField):
         return random.randint(minimum * 100, maximum * 100) / 100
 
 
-Float = Number
+class Float(Number):
+    def __class_getitem__(cls, item):
+        if isinstance(item, slice):
+            minimum, maximum, flag = item.start, item.stop, item.step
+            if flag is None:
+                flag = 0
+            return cls(minimum, maximum, flag >> 1 & 1, flag & 1)
+
+        elif isinstance(item, tuple) and len(item) == 2:
+            if isinstance(item[0], slice):
+                flag = item[0].step or 0
+                return cls(item[0].start, item[0].stop, flag >> 1 & 1, flag & 1, default=item[1])
+        elif isinstance(item, (int, float)):
+            return cls(default=item)
+        raise KeyError(f"Key {item} not Support")
 
 
 class AnyOf(BaseField):
@@ -970,19 +1034,27 @@ class Array(BaseField, ResourceMixin):
         return [self.container.faker() for _ in range(self.response.get("minItems", 2))]
 
 
-List = Array
+class List(Array):
+    def __class_getitem__(cls, item):
+        if isinstance(item, tuple) and len(item) == 2:
+            if isinstance(item[1], slice):
+                min_items, max_items, unique = item[1].start, item[1].stop, item[1].step
+                return cls(item[0], min_items, max_items, unique)
+        elif isinstance(item, BaseField):
+            return cls(item)
+        raise KeyError(f"Key {item} not Support")
+
 
 class Tuple(BaseField):
     """表示固定长度的列表元组"""
-    def __init__(self,*schemas,**kwargs):
-        schemas = [_field_from_object(self,item) for item in schemas]
+
+    def __init__(self, *schemas, **kwargs):
+        schemas = [_field_from_object(self, item) for item in schemas]
         count = len(schemas)
-        schema = {"type":"array",
-                  "items":[schema.response for schema in schemas],
-                  "minItems":count,
-                  "maxItems":count}
-        super().__init__(schema,**kwargs)
-        
+        schema = {"type": "array", "items": [schema.response for schema in schemas], "minItems": count, "maxItems": count}
+        super().__init__(schema, **kwargs)
+
+
 class Object(BaseField, ResourceMixin):
     """
     在 JSON Schema 中，'patternProperties'是一个关键字，用于描述对象属性的模式。
@@ -1036,7 +1108,7 @@ class Object(BaseField, ResourceMixin):
             self.properties = {k: _field_from_object(self, v) for k, v in kwargs.items() if isinstance(v, (type, BaseField))}
 
         elif isinstance(properties, dict):  # proprerties 是键名和字段的字典
-            self.properties ={k:_field_from_object(self,v) for k,v in properties.items()}  # 如果不给字典，就没有这个属性
+            self.properties = {k: _field_from_object(self, v) for k, v in properties.items()}  # 如果不给字典，就没有这个属性
         elif isinstance(properties, (type, BaseField)):  # 类或字段
             field = _field_from_object(self, properties)
             if pattern:
@@ -1073,31 +1145,6 @@ class Object(BaseField, ResourceMixin):
             raise NotImplementedError("Only one pattern property is currently supported and it cannot be combined with additionalProperties")
 
         super().__init__(schema, io=io, default=default, attribute=attribute, nullable=nullable, title=title, description=description)
-
-    def __class_getitem__(cls, item):
-        """
-        1. Dict["self"]  # 表对自己的引用
-        2. Dict["pattern",Field] # 表示键要符合正则表达式
-        4. Dict["k1":Str,"k2":Int,"k3":Dict["self"]]
-
-        :param item:
-        :type item:
-        :return:
-        :rtype:
-        """
-        if isinstance(item, str):
-            return cls(item)
-
-        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str):
-            return cls(properties=item[1], pattern=item[0])
-
-        if isinstance(item, tuple) and all(isinstance(i, slice) for i in item):
-            properties = {}
-            for index in item:
-                key, value, step = index.start, index.stop, index.step
-                properties[key] = _field_from_object(cls, value)
-            return cls(properties=properties)
-        return cls(item)
 
     def bind(self, resource):
         # 满足某个模式的字段都用一个字段类，比如 {{".*_time":DateTime}}
@@ -1160,7 +1207,31 @@ class Object(BaseField, ResourceMixin):
         return output
 
 
-Dict = Object
+class Dict(Object):
+    def __class_getitem__(cls, item):
+        """
+        1. Dict["self"]  # 表对自己的引用
+        2. Dict["pattern",Field] # 表示键要符合正则表达式
+        4. Dict["k1":Str,"k2":Int,"k3":Dict["self"]]
+
+        :param item:
+        :type item:
+        :return:
+        :rtype:
+        """
+        if isinstance(item, str):
+            return cls(item)
+
+        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str):
+            return cls(properties=item[1], pattern=item[0])
+
+        if isinstance(item, tuple) and all(isinstance(i, slice) for i in item):
+            properties = {}
+            for index in item:
+                key, value, step = index.start, index.stop, index.step
+                properties[key] = _field_from_object(cls, value)
+            return cls(properties=properties)
+        return cls(item)
 
 
 class AttributeMapped(Object):

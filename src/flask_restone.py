@@ -725,6 +725,11 @@ class EnumString(String):
 
 
 ES = EnumString
+Literal = EnumString
+
+class Optional(BaseField):
+    def __init__(self,schema,**kwargs):
+        super().__init__(schema,nullable=True,**kwargs)
 
 
 class PatternString(String):
@@ -1031,7 +1036,7 @@ class Object(BaseField, ResourceMixin):
             self.properties = {k: _field_from_object(self, v) for k, v in kwargs.items() if isinstance(v, (type, BaseField))}
 
         elif isinstance(properties, dict):  # proprerties 是键名和字段的字典
-            self.properties = properties  # 如果不给字典，就没有这个属性
+            self.properties ={k:_field_from_object(self,v) for k,v in properties.items()}  # 如果不给字典，就没有这个属性
         elif isinstance(properties, (type, BaseField)):  # 类或字段
             field = _field_from_object(self, properties)
             if pattern:

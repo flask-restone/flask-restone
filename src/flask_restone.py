@@ -1040,6 +1040,8 @@ class List(Array):
             if isinstance(item[1], slice):
                 min_items, max_items, unique = item[1].start, item[1].stop, item[1].step
                 return cls(item[0], min_items, max_items, unique)
+            elif isinstance(item[1], int):
+                return cls(item[0], item[1], item[1])
         elif isinstance(item, BaseField):
             return cls(item)
         raise KeyError(f"Key {item} not Support")

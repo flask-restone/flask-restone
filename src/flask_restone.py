@@ -756,7 +756,7 @@ Ipv4 = from_format("ipv4")
 Ipv6 = from_format("ipv6")
 
 
-class EnumString(String):
+class Literal(String):
     def __init__(self, *args, sperator="|", **kwargs):
         if len(args) > 1:
             args = list(args)
@@ -767,25 +767,22 @@ class EnumString(String):
         super().__init__(enum=args, **kwargs)
 
 
-ES = EnumString
-Literal = EnumString
-
-
-class PatternString(String):
+class Pattern(String):
     _pattern = None
 
     def __init__(self, pattern=None, **kwargs):
         pat = pattern or self._pattern
         if pat is None:
             raise ValueError("Pattern is None")
+        try:
+            re.compile(pat)
+        except re.error as e:
+            raise e
         super().__init__(pattern=pat, **kwargs)
 
 
-PS = PatternString
-
-
 def from_pattern(pattern, name):
-    return type(name, (PatternString,), {"_pattern": pattern})
+    return type(name, (Pattern,), {"_pattern": pattern})
 
 
 class Date(BaseField):
@@ -870,6 +867,7 @@ class Boolean(BaseField):
     def faker(self):
         return random.choice([True, False])
 
+
 class Bool(Boolean):
     def __class_getitem__(cls, item):
         return cls(default=bool(item))
@@ -898,12 +896,11 @@ class Integer(BaseField):
 class Int(Integer):
     def __class_getitem__(cls, item):
         if isinstance(item, slice):
-            minimum, maximum, _ = item.start, item.stop, item.step
-            return cls(minimum, maximum)
-        elif isinstance(item, tuple) and len(item) == 2:
+            return cls(item.start, item.stop)
+        if isinstance(item, tuple) and len(item) == 2:
             if isinstance(item[0], slice) and isinstance(item[1], int):
                 return cls(item[0].start, item[0].stop, default=item[1])
-        elif isinstance(item, int):
+        if isinstance(item, int):
             return cls(default=item)
         raise KeyError(f"Key {item} not Support")
 
@@ -955,32 +952,33 @@ class Float(Number):
                 flag = 0
             return cls(minimum, maximum, flag >> 1 & 1, flag & 1)
 
-        elif isinstance(item, tuple) and len(item) == 2:
+        if isinstance(item, tuple) and len(item) == 2:
             if isinstance(item[0], slice):
                 flag = item[0].step or 0
                 return cls(item[0].start, item[0].stop, flag >> 1 & 1, flag & 1, default=item[1])
 
-        elif isinstance(item, (int, float)):
+        if isinstance(item, (int, float)):
             return cls(default=item)
 
-        elif isinstance(item,(Float,Number)): # 增加对于 Float[1<x<2]等格式的支持,copy操作
-            return cls(item.minimum,item.maximum,item.exclusive_minimum,item.exclusive_maximum)
+        if isinstance(item, (Float, Number)):  # 增加对于 Float[1<x<2]等格式的支持,copy操作
+            return cls(item.minimum, item.maximum, item.exclusive_minimum, item.exclusive_maximum)
 
         raise KeyError(f"Key {item} not Support")
 
-    def __le__(self,n):
-        return Float(self.minimum,n,self.exclusive_minimum,False)
+    def __le__(self, n):
+        return Float(self.minimum, n, self.exclusive_minimum, False)
 
-    def __lt__(self,n):
-        return Float(self.minimum,n,self.exclusive_minimum,True)
+    def __lt__(self, n):
+        return Float(self.minimum, n, self.exclusive_minimum, True)
 
     def __ge__(self, n):
-        return Float(n,self.maximum,False,self.exclusive_maximum)
+        return Float(n, self.maximum, False, self.exclusive_maximum)
 
     def __gt__(self, n):
-        return Float(n,self.maximum,True,self.exclusive_maximum)
+        return Float(n, self.maximum, True, self.exclusive_maximum)
 
-x = Float() #这是一个占位符 ,用于支持 Float[1<x<2] 语法
+
+x = Float()  # 这是一个占位符 ,用于支持 Float[1<x<2] 语法
 
 
 class AnyOf(BaseField):
@@ -991,9 +989,6 @@ class AnyOf(BaseField):
 
     def __init__(self, *subschemas, **kwargs):
         self.subschemas = [_field_from_object(self, sub) for sub in subschemas]
-        # for subschema in subschemas:
-        #     if not isinstance(subschema, BaseField):
-        #         raise ValueError("All subschemas must be instances of BaseField")
         super().__init__({"anyOf": [subschema.response for subschema in self.subschemas]}, **kwargs)
 
     def faker(self):

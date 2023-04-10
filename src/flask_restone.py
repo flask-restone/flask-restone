@@ -926,19 +926,22 @@ class Number(BaseField):
             schema["maximum"] = maximum
             if exclusive_maximum:
                 schema["exclusiveMaximum"] = True
+        self.minimum = minimum
+        self.maximum = maximum
+        self.exclusive_minimum = exclusive_minimum
+        self.exclusive_maximum = exclusive_maximum
+        self.kwargs = kwargs
         super().__init__(schema, **kwargs)
 
     def formatter(self, value):
         return float(value)
 
     def faker(self):
-        minimum = self.response.get("minimum", 0)
-        maximum = self.response.get("maximum", 100)
-        exclusiveMinimum = self.response.get("exclusiveMinimum", False)
-        if exclusiveMinimum:
+        minimum = self.minimum if self.minimum is not None else 0
+        maximum = self.maximum if self.maximum is not None else 1
+        if self.exclusive_minimum:
             minimum += 0.01
-        exclusiveMaximum = self.response.get("exclusiveMaximum", False)
-        if exclusiveMaximum:
+        if self.exclusive_maximum:
             maximum -= 0.01
         return random.randint(minimum * 100, maximum * 100) / 100
 
@@ -955,9 +958,29 @@ class Float(Number):
             if isinstance(item[0], slice):
                 flag = item[0].step or 0
                 return cls(item[0].start, item[0].stop, flag >> 1 & 1, flag & 1, default=item[1])
+
         elif isinstance(item, (int, float)):
             return cls(default=item)
+
+        elif isinstance(item,(Float,Number)): # 增加对于 Float[1<x<2]等格式的支持,copy操作
+            # fixme item 用完之后应该
+            return cls(item.minimum,item.maximum,item.exclusive_minimum,item.exclusive_maximum)
+
         raise KeyError(f"Key {item} not Support")
+
+    def __le__(self,n):
+        return Float(self.minimum,n,self.exclusive_minimum,False)
+
+    def __lt__(self,n):
+        return Float(self.minimum,n,self.exclusive_minimum,True)
+
+    def __ge__(self, n):
+        return Float(n,self.maximum,False,self.exclusive_maximum)
+
+    def __gt__(self, n):
+        return Float(n,self.maximum,True,self.exclusive_maximum)
+
+x = Float() #这是一个占位符 ,用于支持 Float[1<x<2] 语法
 
 
 class AnyOf(BaseField):

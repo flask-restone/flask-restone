@@ -937,13 +937,14 @@ class Number(BaseField):
         return float(value)
 
     def faker(self):
-        minimum = self.minimum if self.minimum is not None else 0
+        minimum = self.minimum or 0
         maximum = self.maximum if self.maximum is not None else 1
+        epsilon = 1e-6  # 设置一个极小的正数 epsioln
         if self.exclusive_minimum:
-            minimum += 0.01
+            minimum += epsilon
         if self.exclusive_maximum:
-            maximum -= 0.01
-        return random.randint(minimum * 100, maximum * 100) / 100
+            maximum -= epsilon
+        return round(random.uniform(minimum, maximum), 2)
 
 
 class Float(Number):
@@ -963,7 +964,6 @@ class Float(Number):
             return cls(default=item)
 
         elif isinstance(item,(Float,Number)): # 增加对于 Float[1<x<2]等格式的支持,copy操作
-            # fixme item 用完之后应该
             return cls(item.minimum,item.maximum,item.exclusive_minimum,item.exclusive_maximum)
 
         raise KeyError(f"Key {item} not Support")

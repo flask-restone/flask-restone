@@ -638,10 +638,6 @@ class String(BaseField):
     uuid：UUID格式，如：123e4567-e89b-12d3-a456-426655440000
 
     特别的:
-        Str[0:6] 表示长度为0到6的string
-        Str[6] 表示长度为6的string
-        Str[6:] 表示最小长度为6
-        Str[:6,"default"] 表示最大长度为6
 
         Re["\d{2}"] 表示符合正则表达式的
         Enum["a|b|c|d"] 表示枚举的
@@ -724,6 +720,13 @@ class String(BaseField):
 
 
 class Str(String):
+    """
+    example:
+        Str[0:6] 表示长度为0到6
+        Str[6] 表示长度为6
+        Str[6:] 表示最小长度为6
+        Str[:6,"default"] 表示最大长度为6
+    """
     def __class_getitem__(cls, item):
         if isinstance(item, slice):
             min_length, max_length, _ = item.start, item.stop, item.step
@@ -738,25 +741,33 @@ class Str(String):
         raise KeyError(f"Key {item} not Support")
 
 
-class FormatString(String):  # 有限的只能预定义好
+class Format(String):  # 有限的只能预定义好
     _format = None
-
+    __subclasses__ = {}
+    
     def __init__(self, **kwargs):
         super().__init__(format=self._format, **kwargs)
 
+    def __class_getitem__(cls, format): # 切片方法返回新类,同名同类
+        if format not in cls.__subclasses__:
+            name = ''.join(format.replace('-',' ').title())
+            cls.__subclasses__[format] = type(name, (cls,), {"_format": format})
+        return cls.__subclasses__[format]
 
-def from_format(format):
-    return type(format, (FormatString,), {"_format": format})
-
-
-UUID = from_format("uuid")
-Uri = from_format("uri")
-Email = from_format("email")
-Ipv4 = from_format("ipv4")
-Ipv6 = from_format("ipv6")
+    
+UUID = Format["uuid"]
+Uri = Format["uri"]
+Email = Format["email"]
+Ipv4 = Format["ipv4"]
+Ipv6 = Format["ipv6"]
 
 
 class Literal(String):
+    """
+    example:
+        Literal["a|b|c|d"] 表示枚举的
+        Literal["a","b"] 表示字面量
+    """
     def __init__(self, *args, sperator="|", **kwargs):
         if len(args) > 1:
             args = list(args)
@@ -768,22 +779,33 @@ class Literal(String):
 
 
 class Pattern(String):
+    """
+     example:
+        Pattern["^\d{5}$"] 表示符合正则表达式
+    """
     _pattern = None
-
+    __subclasses__ = {}
+    
     def __init__(self, pattern=None, **kwargs):
         pat = pattern or self._pattern
         if pat is None:
             raise ValueError("Pattern is None")
+        self._check_pattern(pat)
+        super().__init__(pattern=pat, **kwargs)
+    
+    @staticmethod
+    def _check_pattern(pat):
         try:
             re.compile(pat)
         except re.error as e:
             raise e
-        super().__init__(pattern=pat, **kwargs)
 
-
-def from_pattern(pattern, name):
-    return type(name, (Pattern,), {"_pattern": pattern})
-
+    def __class_getitem__(cls, pattern): # 切片方法返回新类,同名同类
+        cls._check_pattern(pattern)
+        if pattern not in cls.__subclasses__:
+            cls.__subclasses__[pattern] = type(f"Pattern{len(cls.__subclasses__)}", (cls,), {"_format": format})
+        return cls.__subclasses__[pattern]
+    
 
 class Date(BaseField):
     TYPE_MAPPING = {

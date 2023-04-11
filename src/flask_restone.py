@@ -983,22 +983,33 @@ class Float(Number):
             return cls(default=item)
 
         if isinstance(item, (Float, Number)):  # 增加对于 Float[1<x<2]等格式的支持,copy操作
-            return cls(item.minimum, item.maximum, item.exclusive_minimum, item.exclusive_maximum)
-
+            class_ = cls(item.minimum, item.maximum, item.exclusive_minimum, item.exclusive_maximum)
+            item.minimum = None # copy 新类,旧的重置
+            item.maximum = None
+            item.exclusive_minimum = False
+            item.exclusive_maximum = False
+            return class_
         raise KeyError(f"Key {item} not Support")
 
     def __le__(self, n):
-        return Float(self.minimum, n, self.exclusive_minimum, False)
+        self.maximum = n
+        self.exclusive_maximum = False
+        return self
 
     def __lt__(self, n):
-        return Float(self.minimum, n, self.exclusive_minimum, True)
+        self.maximum = n
+        self.exclusive_maximum = True
+        return self
 
     def __ge__(self, n):
-        return Float(n, self.maximum, False, self.exclusive_maximum)
+        self.minimum = n
+        self.exclusive_minimum = False
+        return self
 
     def __gt__(self, n):
-        return Float(n, self.maximum, True, self.exclusive_maximum)
-
+        self.minimum = n
+        self.exclusive_minimum = True
+        return self
 
 x = Float()  # 这是一个占位符 ,用于支持 Float[1<x<2] 语法
 

@@ -2494,7 +2494,7 @@ class ResourceMeta(type):
 
         if schema:
             class_.schema = fs = FieldSet(
-                {k: f for (k, f) in schema.items() if not k.startswith("__")},
+                {k: _field_from_object(class_,f) for (k, f) in schema.items() if not k.startswith("__")},
                 required_fields=meta.get("required", None),
             )
 

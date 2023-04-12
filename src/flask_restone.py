@@ -803,7 +803,7 @@ class Pattern(String):
     def __class_getitem__(cls, pattern): # 切片方法返回新类,同名同类
         cls._check_pattern(pattern)
         if pattern not in cls.__subclasses__:
-            cls.__subclasses__[pattern] = type(f"Pattern{len(cls.__subclasses__)}", (cls,), {"_format": format})
+            cls.__subclasses__[pattern] = type(f"Pattern{len(cls.__subclasses__)}", (cls,), {"_pattern": pattern})
         return cls.__subclasses__[pattern]
     
 

@@ -3088,13 +3088,16 @@ class RelationalManager(Manager):
     def convert_filters(value, field_filters):
         if isinstance(value, dict) and len(value) == 1:
             filter_name = next(iter(value))
-            if len(filter_name) > 1 and filter_name.startswith("$"):
+            if filter_name.startswith("$") and len(filter_name) > 1:
                 filter_name = filter_name[1:]
-                for filter in field_filters.values():
-                    if filter_name == filter.name:
-                        return filter.convert(value)
-        filter = field_filters["eq"]  # 没有名为None的了
-        return filter.convert(value)
+                filter = field_filters.get(filter_name, None)
+                if filter is not None:
+                    return filter.convert(value)
+        filter = field_filters.get("eq", None)
+        if filter is None:
+            raise ValueError("Filter 'eq' is not defined")
+        return filter.convert({"$eq": value})
+
 
     def _convert_filters(self, where):  # 将转换where的步骤移到manager中，使得在查询之前可以修改where
         for name, value in where.items():

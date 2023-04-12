@@ -2845,18 +2845,34 @@ class Manager:
             field_name: {name: self._init_filter(filter, name, fields[field_name], field_name) for (name, filter) in field_filters.items()} for (field_name, field_filters) in field_filters.items()
         }
 
-    # 字段集和对应的过滤器表达式得到的过滤器字典
     @staticmethod
-    def filters_for_fields(fields, filters_expression, field_filters_dict, filters_name_dict):
+    def filters_for_fields(fields, filters_expression, field_filters_dict,
+                           filters_name_dict):
+        """
+        搜刮每个字段可用的过滤器
+        meta.filters = {"name":{},"*":{}} 废弃，需要指明过滤器的类
+        meta.filters = {"name":["eq","ne"],"*":{}}
+        meta.filters = ("name","id")
+
+        :param fields: 字段实例
+        :param filters_expression: 资源指定的过滤器
+        :param field_filters_dict: 字段可用过滤器字典
+        :param filters_name_dict: 过滤字名称字典
+        :return:
+        """
         filters = {}
         for field_name, field in fields.items():
             field_class_filters = set()  # 名称
+            # todo?:此处的逻辑是子类必然会使用父类的过滤器
+            # todo: 应该是子类只能优先用自己的过滤器 x
             for cls in (field.__class__,) + field.__class__.__bases__:  # 字段和其父类
                 if cls in field_filters_dict:
                     field_class_filters.update(field_filters_dict[cls])
-
-            field_filters = {name: filters_name_dict[name] for name in field_class_filters}
-
+        
+            field_filters = {name: filters_name_dict[name] for name in
+                             field_class_filters}
+            # todo: 过滤操作下放到 meta.filters
+            #
             if isinstance(filters_expression, dict):
                 try:
                     field_expression = filters_expression[field_name]
@@ -2865,10 +2881,12 @@ class Manager:
                         field_expression = filters_expression["*"]
                     except KeyError:
                         continue
-                if isinstance(field_expression, dict):  # 字段名下表达式还是字典
-                    field_filters = field_expression
-                elif isinstance(field_expression, (list, tuple)):  # 如果是名称元组
-                    field_filters = {name: filter for (name, filter) in field_filters.items() if name in field_expression}
+                # if isinstance(field_expression, dict):  # 字段名下表达式还是字典
+                #     field_filters = field_expression
+                if isinstance(field_expression, (list, tuple)):  # 如果是名称元组
+                    field_filters = {name: filter for (name, filter) in
+                                     field_filters.items() if
+                                     name in field_expression}
                 elif field_expression is not True:
                     continue
             elif isinstance(filters_expression, (tuple, list)):  # 可以用的过滤器

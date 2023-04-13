@@ -563,26 +563,19 @@ class Any(BaseField):  # 可以用字典初始化
         )
 
 
-class Custom(BaseField):  # 自定义字段
-    def __init__(self, schema, converter=None, formatter=None, **kwargs):
-        super().__init__(schema, **kwargs)
-        self._converter = converter
-        self._formatter = formatter
-
-    def format(self, value):
-        if self._formatter is None:
-            return value
-        return self._formatter(value)
-
-    def converter(self, value):
-        if self._converter is None:
-            return value
-        return self._converter(value)
-
-
 class Optional(BaseField):
     def __init__(self, schema, **kwargs):
         super().__init__(schema, nullable=True, **kwargs)
+
+
+class ReadOnly(BaseField):
+    def __init__(self,schema,**kwargs):
+        super().__init__(schema,io='r',**kwargs)
+
+
+class WriteOnly(BaseField):
+    def __init__(self,schema,**kwargs):
+        super().__init__(schema,io="w",**kwargs)
 
 
 class String(BaseField):

@@ -1264,7 +1264,7 @@ class Dict(Object):
     def __class_getitem__(cls, item):
         """
         1. Dict["self"]  # 表对自己的引用
-        2. Dict["pattern",Field] # 表示键要符合正则表达式
+        2. Dict[Pattern['\d+'],Field] # 表示键要符合正则表达式
         4. Dict["k1":Str,"k2":Int,"k3":Dict["self"]]
 
         :param item:
@@ -1275,8 +1275,8 @@ class Dict(Object):
         if isinstance(item, str):
             return cls(item)
 
-        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str):
-            return cls(properties=item[1], pattern=item[0])
+        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], Pattern) or issubclass(item[0],Pattern):
+            return cls(properties=item[1], pattern=item[0]._pattern)
 
         if isinstance(item, tuple) and all(isinstance(i, slice) for i in item):
             properties = {}

@@ -35,37 +35,6 @@ from werkzeug.urls import url_parse
 from werkzeug.utils import cached_property
 from werkzeug.wrappers import Response
 
-__all__ = [
-    "fields",
-    "ModelResource",
-    "Route",
-    "Api",
-    "ItemRoute",
-    "AttrRoute",
-    "principals",
-    "SQLAlchemyManager",
-    "RestoneException",
-    "ItemNotFound",
-    "RequestMustBeJSON",
-    "ValidationError",
-    "DuplicateKey",
-    "BackendConflict",
-    "PageNotFound",
-    "InvalidJSON",
-    "InvalidFilter",
-    "Forbidden",
-    "before_create",
-    "after_create",
-    "before_update",
-    "after_update",
-    "before_delete",
-    "after_delete",
-    "before_relate",
-    "after_relate",
-    "before_unrelate",
-    "after_unrelate",
-    "Pagination",
-]
 
 _faker = Faker()
 # ---------------------------HTTP常量--------------------
@@ -2648,7 +2617,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
             AssertionError: 如果指定路径对应的值与参数值不匹配，则引发此异常。
 
         Returns:
-            无返回值，HTTP状态码为204。
+            无返回值，HTTP状态码为200。
         """
         patch = request.json  # 以列表形式提供不具名
         patch = RFC6902_PATCH.convert(patch)
@@ -2666,7 +2635,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
             func(path, value)
         # 统一提交，中途报错则不会提交
         self.manager.commit()
-        return None, 204
+        return None, 200
 
     def is_root_path(self, path):
         return path == "/"

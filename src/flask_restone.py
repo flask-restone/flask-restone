@@ -1237,15 +1237,16 @@ class Dict(Object):
         if isinstance(item, str):
             return cls(item)
 
-        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], Pattern) or issubclass(item[0],Pattern):
-            return cls(properties=item[1], pattern=item[0]._pattern)
-
         if isinstance(item, tuple) and all(isinstance(i, slice) for i in item):
             properties = {}
             for index in item:
                 key, value, step = index.start, index.stop, index.step
                 properties[key] = _field_from_object(cls, value)
             return cls(properties=properties)
+        
+        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], Pattern) or issubclass(item[0],Pattern):
+            return cls(properties=item[1], pattern=item[0]._pattern)
+        
         return cls(item)
 
 

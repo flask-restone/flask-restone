@@ -195,7 +195,7 @@ class InvalidUrl(RestoneException):
     status_code = 400
 
 
-class OpreationNotAllowed(RestoneException):
+class OperationNotAllowed(RestoneException):
     status_code = 405
 
 
@@ -2641,9 +2641,9 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
             patch: RFC6902_PATCH 对象，包含一组操作。
 
         Raises:
-            OpreationNotAllowed: 如果指定的操作不在允许的操作列表中，则引发此异常。
+            OperationNotAllowed: 如果指定的操作不在允许的操作列表中，则引发此异常。
             InvalidUrl: 如果指定的路径不存在，则引发此异常。
-            OpreationNotAllowed: 如果指定的操作被允许但未实现，则引发此异常。
+            OperationNotAllowed: 如果指定的操作被允许但未实现，则引发此异常。
             InvalidJSON: 如果参数值不是预期的格式，则引发此异常。
             AssertionError: 如果指定路径对应的值与参数值不匹配，则引发此异常。
 
@@ -2654,14 +2654,14 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         for p in patch:
             op = p.pop("op")  # 可用操作
             if op not in self.meta.allowed_opreations:
-                raise OpreationNotAllowed(f"{op} is not allowed")
+                raise OperationNotAllowed(f"{op} is not allowed")
             path = p.pop("path")  # 操作路径
             if not self.path_exists(path):
                 raise InvalidUrl(f"{path} not found")
             value = p.pop("value", None)  # 可选参数值
             func = getattr(self, op, None)
             if func is None:
-                raise OpreationNotAllowed(f"{op} is allowed but not implemented")
+                raise OperationNotAllowed(f"{op} is allowed but not implemented")
             func(path, value)
         # 统一提交，中途报错则不会提交
         self.manager.commit()

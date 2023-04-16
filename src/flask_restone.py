@@ -517,6 +517,7 @@ class BaseField(Schema):
     def default(self, value):
         self._default = value
 
+
     def schema(self):
         schema = self._schema  # 格式可执行则执行
         if callable(schema):
@@ -569,13 +570,13 @@ class Optional(BaseField):
 
 
 class ReadOnly(BaseField):
-    def __init__(self,schema,**kwargs):
-        super().__init__(schema,io='r',**kwargs)
+    def __init__(self, schema, **kwargs):
+        super().__init__(schema, io="r", **kwargs)
 
 
 class WriteOnly(BaseField):
-    def __init__(self,schema,**kwargs):
-        super().__init__(schema,io="w",**kwargs)
+    def __init__(self, schema, **kwargs):
+        super().__init__(schema, io="w", **kwargs)
 
 
 class String(BaseField):
@@ -689,6 +690,7 @@ class Str(String):
         Str[6:] 表示最小长度为6
         Str[:6,"default"] 表示最大长度为6
     """
+
     def __class_getitem__(cls, item):
         if isinstance(item, slice):
             min_length, max_length, _ = item.start, item.stop, item.step
@@ -705,18 +707,18 @@ class Str(String):
 
 class Format(String):  # 有限的只能预定义好
     _format = None
-    __subclasses__ = {}
-    
+    subclasses = {}
+
     def __init__(self, **kwargs):
         super().__init__(format=self._format, **kwargs)
 
-    def __class_getitem__(cls, format): # 切片方法返回新类,同名同类
-        if format not in cls.__subclasses__:
-            name = ''.join(format.replace('-',' ').title())
-            cls.__subclasses__[format] = type(name, (cls,), {"_format": format})
-        return cls.__subclasses__[format]
+    def __class_getitem__(cls, format):  # 切片方法返回新类,同名同类
+        if format not in cls.subclasses:
+            name = "".join(format.replace("-", " ").title())
+            cls.subclasses[format] = type(name, (cls,), {"_format": format,"subclasses":{}})
+        return cls.subclasses[format]
 
-    
+
 UUID = Format["uuid"]
 Uri = Format["uri"]
 Email = Format["email"]
@@ -730,6 +732,7 @@ class Literal(String):
         Literal["a|b|c|d"] 表示枚举的
         Literal["a","b"] 表示字面量
     """
+
     def __init__(self, *args, sperator="|", **kwargs):
         if len(args) > 1:
             args = list(args)
@@ -742,19 +745,20 @@ class Literal(String):
 
 class Pattern(String):
     """
-     example:
-        Pattern["^\d{5}$"] 表示符合正则表达式
+    example:
+       Pattern["^\d{5}$"] 表示符合正则表达式
     """
+
     _pattern = None
-    __subclasses__ = {}
-    
+    subclasses = {}
+
     def __init__(self, pattern=None, **kwargs):
         pat = pattern or self._pattern
         if pat is None:
             raise ValueError("Pattern is None")
         self._check_pattern(pat)
         super().__init__(pattern=pat, **kwargs)
-    
+
     @staticmethod
     def _check_pattern(pat):
         try:
@@ -762,12 +766,12 @@ class Pattern(String):
         except re.error as e:
             raise e
 
-    def __class_getitem__(cls, pattern): # 切片方法返回新类,同名同类
+    def __class_getitem__(cls, pattern):  # 切片方法返回新类,同名同类
         cls._check_pattern(pattern)
-        if pattern not in cls.__subclasses__:
-            cls.__subclasses__[pattern] = type(f"Pattern{len(cls.__subclasses__)}", (cls,), {"_pattern": pattern})
-        return cls.__subclasses__[pattern]
-    
+        if pattern not in cls.subclasses:
+            cls.subclasses[pattern] = type(f"Pattern{len(cls.subclasses)}", (cls,), {"_pattern": pattern})
+        return cls.subclasses[pattern]
+
 
 class Date(BaseField):
     TYPE_MAPPING = {
@@ -946,7 +950,7 @@ class Float(Number):
 
         if isinstance(item, (Float, Number)):  # 增加对于 Float[1<x<2]等格式的支持,copy操作
             class_ = cls(item.minimum, item.maximum, item.exclusive_minimum, item.exclusive_maximum)
-            item.minimum = None # copy 新类,旧的重置
+            item.minimum = None  # copy 新类,旧的重置
             item.maximum = None
             item.exclusive_minimum = False
             item.exclusive_maximum = False
@@ -972,6 +976,7 @@ class Float(Number):
         self.minimum = n
         self.exclusive_minimum = True
         return self
+
 
 x = Float()  # 这是一个占位符 ,用于支持 Float[1<x<2] 语法
 
@@ -1243,10 +1248,10 @@ class Dict(Object):
                 key, value, step = index.start, index.stop, index.step
                 properties[key] = _field_from_object(cls, value)
             return cls(properties=properties)
-        
-        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], Pattern) or issubclass(item[0],Pattern):
+
+        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], Pattern) or issubclass(item[0], Pattern):
             return cls(properties=item[1], pattern=item[0]._pattern)
-        
+
         return cls(item)
 
 
@@ -2457,7 +2462,7 @@ class ResourceMeta(type):
 
         if schema:
             class_.schema = fs = FieldSet(
-                {k: _field_from_object(class_,f) for (k, f) in schema.items() if not k.startswith("__")},
+                {k: _field_from_object(class_, f) for (k, f) in schema.items() if not k.startswith("__")},
                 required_fields=meta.get("required", None),
             )
 
@@ -2810,8 +2815,7 @@ class Manager:
         }
 
     @staticmethod
-    def filters_for_fields(fields, filters_expression, field_filters_dict,
-                           filters_name_dict):
+    def filters_for_fields(fields, filters_expression, field_filters_dict, filters_name_dict):
         """
         搜刮每个字段可用的过滤器
         meta.filters = {"name":{},"*":{}} 废弃，需要指明过滤器的类
@@ -2832,9 +2836,8 @@ class Manager:
             for cls in (field.__class__,) + field.__class__.__bases__:  # 字段和其父类
                 if cls in field_filters_dict:
                     field_class_filters.update(field_filters_dict[cls])
-        
-            field_filters = {name: filters_name_dict[name] for name in
-                             field_class_filters}
+
+            field_filters = {name: filters_name_dict[name] for name in field_class_filters}
             # todo: 过滤操作下放到 meta.filters
             #
             if isinstance(filters_expression, dict):
@@ -2848,9 +2851,7 @@ class Manager:
                 # if isinstance(field_expression, dict):  # 字段名下表达式还是字典
                 #     field_filters = field_expression
                 if isinstance(field_expression, (list, tuple)):  # 如果是名称元组
-                    field_filters = {name: filter for (name, filter) in
-                                     field_filters.items() if
-                                     name in field_expression}
+                    field_filters = {name: filter for (name, filter) in field_filters.items() if name in field_expression}
                 elif field_expression is not True:
                     continue
             elif isinstance(filters_expression, (tuple, list)):  # 可以用的过滤器
@@ -3061,7 +3062,6 @@ class RelationalManager(Manager):
         if filter is None:
             raise ValueError("Filter 'eq' is not defined")
         return filter.convert({"$eq": value})
-
 
     def _convert_filters(self, where):  # 将转换where的步骤移到manager中，使得在查询之前可以修改where
         for name, value in where.items():
@@ -4187,3 +4187,5 @@ class DataFrameManager:
         """
         item = self.read(id)
         self.delete(item)
+
+# test_every_thing

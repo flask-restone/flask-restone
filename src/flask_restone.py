@@ -729,15 +729,12 @@ Ipv6 = Format["ipv6"]
 class Literal(String):
     """
     example:
-        Literal["a|b|c|d"] 表示枚举的
         Literal["a","b"] 表示字面量
     """
 
-    def __init__(self, *args, sperator="|", **kwargs):
-        if len(args) > 1:
+    def __init__(self, *args, **kwargs):
+        if len(args) >= 1:
             args = list(args)
-        elif len(args) == 1:
-            args = args[0].split(sperator)
         else:
             raise ValueError("Enum Args Lost")
         super().__init__(enum=args, **kwargs)

@@ -567,7 +567,8 @@ class Any(BaseField):  # 可以用字典初始化
 class Optional(BaseField):
     def __init__(self, schema, **kwargs):
         super().__init__(schema, nullable=True, **kwargs)
-
+    
+    
 
 class ReadOnly(BaseField):
     def __init__(self, schema, **kwargs):
@@ -726,20 +727,6 @@ Ipv4 = Format["ipv4"]
 Ipv6 = Format["ipv6"]
 
 
-class Literal(String):
-    """
-    example:
-        Literal["a","b"] 表示字面量
-    """
-
-    def __init__(self, *args, **kwargs):
-        if len(args) >= 1:
-            args = list(args)
-        else:
-            raise ValueError("Enum Args Lost")
-        super().__init__(enum=args, **kwargs)
-
-
 class Pattern(String):
     """
     example:
@@ -766,9 +753,23 @@ class Pattern(String):
     def __class_getitem__(cls, pattern):  # 切片方法返回新类,同名同类
         cls._check_pattern(pattern)
         if pattern not in cls.subclasses:
-            cls.subclasses[pattern] = type(f"Pattern{len(cls.subclasses)}", (cls,), {"_pattern": pattern})
+            cls.subclasses[pattern] = type(f"Pattern{len(cls.subclasses)}", (cls,), {"_pattern": pattern,"subclasses":{}})
         return cls.subclasses[pattern]
 
+
+class Literal(String):
+    """
+    example:
+        Literal["a","b"] 表示字面量
+    """
+
+    def __init__(self, *args, **kwargs):
+        if len(args) >= 1:
+            args = list(args)
+        else:
+            raise ValueError("Enum Args Lost")
+        super().__init__(enum=args, **kwargs)
+        
 
 class Date(BaseField):
     TYPE_MAPPING = {
@@ -1516,40 +1517,6 @@ class ItemUri(BaseField):
 
     def faker(self):
         return f"{self.target.route_prefix}/{self.target.manager.id_field.faker()}"
-
-
-# 为了更方便的调用以及别名
-@dataclass
-class fields:  # noqa
-    Raw = BaseField
-    Any = Any
-    AnyOf = AnyOf
-    String = String
-    UUID = UUID
-
-    Uri = Uri
-    Email = Email
-    Date = Date
-    DateTime = DateTime
-    Boolean = Boolean
-    Integer = Integer
-    Number = Number
-
-    Array = Array
-    Object = Object
-    Inline = Inline
-    InlineModel = InlineModel
-    ToOne = ToOne
-    ToMany = ToMany
-    ItemType = ItemType
-    ItemUri = ItemUri
-    # alias
-    Int = Integer
-    Str = String
-    Bool = Boolean
-    List = Array
-    Dict = Object
-    Union = AnyOf
 
 
 # -------------------过滤器-------------------------------------

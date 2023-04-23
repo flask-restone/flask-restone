@@ -564,19 +564,38 @@ class Any(BaseField):  # 可以用字典初始化
 
 
 class Optional(BaseField):
-    def __init__(self, schema, **kwargs):
-        super().__init__(schema, nullable=True, **kwargs)
-    
-    
+    """提议
+    兼容 Optional[Int]
+    和 Optional|Int
+    """
+    def __class_getitem__(cls, schema):
+        schema = _field_from_object(cls,schema)
+        schema.nullable = True
+        return schema
 
 class ReadOnly(BaseField):
-    def __init__(self, schema, **kwargs):
-        super().__init__(schema, io="r", **kwargs)
+    """模仿不可变参数，表达只读属性"""
+    io = 'r'
+    def __class_getitem__(cls, schema):
+        schema = _field_from_object(cls,schema)
+        schema.io = cls.io
+        return schema
 
 
 class WriteOnly(BaseField):
-    def __init__(self, schema, **kwargs):
-        super().__init__(schema, io="w", **kwargs)
+    io = 'r'
+    def __class_getitem__(cls, schema):
+        schema = _field_from_object(cls,schema)
+        schema.io = cls.io
+        return schema
+
+
+class CreateOnly(WriteOnly):
+    io = 'c'
+
+
+class UpdateOnly(WriteOnly):
+    io = 'r'
 
 
 class String(BaseField):

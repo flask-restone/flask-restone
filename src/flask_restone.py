@@ -20,7 +20,8 @@ from flask import current_app, g, json, jsonify, make_response, request
 from flask.globals import app_ctx, request_ctx
 from flask_principal import ItemNeed, Permission, RoleNeed, UserNeed
 from flask_sqlalchemy import Pagination as SAPagination
-from jsonschema import Draft4Validator, FormatChecker, ValidationError as _ValidationError
+from jsonschema import (Draft4Validator, FormatChecker,
+                        ValidationError as _ValidationError)
 from sqlalchemy import String as String_, and_, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
@@ -33,7 +34,6 @@ from werkzeug.http import HTTP_STATUS_CODES
 from werkzeug.urls import url_parse
 from werkzeug.utils import cached_property
 from werkzeug.wrappers import Response
-
 
 _faker = Faker()
 # ---------------------------HTTP常量--------------------
@@ -447,6 +447,7 @@ class BaseField(Schema):
     def __init__(
         self,
         schema,
+        /,
         io="rw",
         default=None,
         attribute=None,
@@ -516,7 +517,6 @@ class BaseField(Schema):
     def default(self, value):
         self._default = value
 
-
     def schema(self):
         schema = self._schema  # 格式可执行则执行
         if callable(schema):
@@ -547,20 +547,26 @@ class BaseField(Schema):
         key = self.attribute or key
         return self.format(get_value(key, obj, self.default))
 
-    def __repr__(self):
-        return f"{self.__class__.__name__}(attribute={repr(self.attribute)})"
+    # def __repr__(self):
+    #     return f"{self.__class__.__name__}(attribute={repr(self.attribute)})"
 
     def faker(self):
         """假数据生成，用于测试"""
         return f"{self.attribute}"
 
 
-class Any(BaseField):  # 可以用字典初始化
+class Any(BaseField):
     def __init__(self, **kwargs):
-        super().__init__(
-            {"type": ["null", "string", "number", "boolean", "object", "array"]},
-            **kwargs,
-        )
+        super().__init__({"type": ["null", "string", "number", "boolean", "object", "array"]}, **kwargs)
+
+
+class Union(BaseField):
+    def __init__(self, *subschemas, **kwargs):
+        self.subschemas = [_field_from_object(self, sub) for sub in subschemas]
+        super().__init__({"anyOf": [subschema.response for subschema in self.subschemas]}, **kwargs)
+
+    def faker(self):
+        return random.choice(self.subschemas).faker()
 
 
 class Optional(BaseField):
@@ -568,37 +574,42 @@ class Optional(BaseField):
     兼容 Optional[Int]
     和 Optional|Int
     """
+
     def __class_getitem__(cls, schema):
-        schema = _field_from_object(cls,schema)
+        schema = _field_from_object(cls, schema)
         schema.nullable = True
         return schema
 
+
 class ReadOnly(BaseField):
     """模仿不可变参数，表达只读属性"""
-    io = 'r'
+
+    io = "r"
+
     def __class_getitem__(cls, schema):
-        schema = _field_from_object(cls,schema)
+        schema = _field_from_object(cls, schema)
         schema.io = cls.io
         return schema
 
 
 class WriteOnly(BaseField):
-    io = 'r'
+    io = "r"
+
     def __class_getitem__(cls, schema):
-        schema = _field_from_object(cls,schema)
+        schema = _field_from_object(cls, schema)
         schema.io = cls.io
         return schema
 
 
 class CreateOnly(WriteOnly):
-    io = 'c'
+    io = "c"
 
 
 class UpdateOnly(WriteOnly):
-    io = 'r'
+    io = "r"
 
 
-class String(BaseField):
+class Str(BaseField):
     """
     JSON Schema的string类型的format包括：
 
@@ -619,39 +630,11 @@ class String(BaseField):
     regex：正则表达式格式，如：^[a-z]+$
     uuid：UUID格式，如：123e4567-e89b-12d3-a456-426655440000
 
-    特别的:
-
-        Re["\d{2}"] 表示符合正则表达式的
-        Enum["a|b|c|d"] 表示枚举的
-        Literal["a","b"] 表示字面量
-
-        Int[5:100] 表示5到100之间
-        Int[1:...] 表示1 到正无穷
-        Int[...:0] 表示负无穷到0
-        Int[32] 表示默认为 32
-
-        Bool[1] 表示默认为True
-        Bool[0] 表示默认为False
-
-        Float[0:1,0.5] 表示0到1之间默认0.5（包括0和1)
-        Float[0:1:01,0.5] 表示0,1之间,01 表示左开右闭,10表示左闭右开,11表示左闭右闭,00表示左开右开
-        Float[0:,0.5] 表示0到无穷之间默认0.5
-        Float[:-2,-5] 表示负无穷到-2之间默认0.5
-
-        List[Int,1:5] 表示内容为 Int，长度为1:5的列表
-        List[Int,5] 表示内容为 Int，长度为5的列表
-        List[Int] 表示内容为 Int 的列表
-
-        Tuple[Str,Int] 表示内容为 Str,Int，固定长度为2 的元组列表
-
-        Dict["self"]  # 表对自己的引用
-        Dict["pattern",Field] # 表示键要符合正则表达式
-        Dict["k1":Str,"k2":Int,"k3":Dict["self"]]
-
-        Union[Str,Int,Float] # 表示或的关系
-
-
-
+    example:
+        Str[0:6] 表示长度为0到6
+        Str[6] 表示长度为6
+        Str[6:] 表示最小长度为6
+        Str[:6,"default"] 表示最大长度为6
     """
 
     url_rule_converter = "string"
@@ -660,6 +643,7 @@ class String(BaseField):
         self,
         min_length=None,
         max_length=None,
+        /,
         pattern=None,
         enum=None,
         format=None,
@@ -700,94 +684,164 @@ class String(BaseField):
         max_length = self.response.get("maxLength", 6)
         return "x" * random.randint(min_length, max_length)
 
-
-class Str(String):
-    """
-    example:
-        Str[0:6] 表示长度为0到6
-        Str[6] 表示长度为6
-        Str[6:] 表示最小长度为6
-        Str[:6,"default"] 表示最大长度为6
-    """
-
     def __class_getitem__(cls, item):
+        # Str[1:5]
         if isinstance(item, slice):
-            min_length, max_length, _ = item.start, item.stop, item.step
-            return cls(min_length, max_length)
-        elif isinstance(item, tuple) and len(item) == 2:
+            return cls(item.start, item.stop)
+        # Str["\d+","default"]
+        # Str["a","b","c"]
+        # Str["uuid"]
+        # str[20]
+        if isinstance(item, int) and item >= 0:
+            return cls(item, item)
+        # Str["^default$"]
+        if isinstance(item, str):
+            if item.startswith("^") and item.endswith("$"):
+                return cls(pattern=item)
+            elif "|" in item:
+                return cls(enum=item.split("|"))
+            elif item.startswith("%") and item.endswith("%"):  # Str["%uuid%"]
+                return cls(format=item[1:-1])
+            return cls(default=item)
+
+        if isinstance(item, tuple) and len(item) == 2:
+            # Str[1:5,"app"]
             if isinstance(item[0], slice) and isinstance(item[1], str):
                 return cls(item[0].start, item[0].stop, default=item[1])
-        elif isinstance(item, int) and item >= 0:
-            return cls(item, item)
-        elif isinstance(item, str):
+            # Str[3,"app"]
+            if isinstance(item[0], int) and isinstance(item[1], str):
+                return cls(item[0], item[0], default=item[1])
+
+        raise KeyError(f"Key {item} not Support")
+
+
+UUID = Str["%uuid%"]
+Uri = Str["%uri%"]
+Email = Str["%email%"]
+Ipv4 = Str["%ipv4%"]
+Ipv6 = Str["%ipv6%"]
+
+
+class Int(BaseField):
+    url_rule_converter = "int"
+
+    def __init__(self, minimum=None, maximum=None, /, default=None, **kwargs):
+        schema = {"type": "integer"}
+        if minimum is not None:
+            schema["minimum"] = minimum
+        if maximum is not None:
+            schema["maximum"] = maximum
+        super().__init__(schema, default=default, **kwargs)
+
+    def formatter(self, value):
+        return int(value)
+
+    def faker(self):
+        minimum = self.response.get("minimum", 1)
+        maximum = self.response.get("maximum", 100)
+        return random.randint(minimum, maximum)
+
+    def __class_getitem__(cls, item):
+        # int[0:5]
+        if isinstance(item, slice):
+            return cls(item.start, item.stop)
+        # int[0:9,0]
+        if isinstance(item, tuple) and len(item) == 2:
+            if isinstance(item[0], slice) and isinstance(item[1], int):
+                return cls(item[0].start, item[0].stop, default=item[1])
+        # int[0]
+        if isinstance(item, int):
             return cls(default=item)
         raise KeyError(f"Key {item} not Support")
 
 
-class Format(String):  # 有限的只能预定义好
-    _format = None
-    subclasses = {}
+class Float(BaseField):
+    def __init__(
+        self,
+        minimum=None,
+        maximum=None,
+        exclusive_minimum=False,
+        exclusive_maximum=False,
+        **kwargs,
+    ):
+        schema = {"type": "number"}
+        if minimum is not None:
+            schema["minimum"] = minimum
+            if exclusive_minimum:
+                schema["exclusiveMinimum"] = True
+        if maximum is not None:
+            schema["maximum"] = maximum
+            if exclusive_maximum:
+                schema["exclusiveMaximum"] = True
+        self.minimum = minimum
+        self.maximum = maximum
+        self.exclusive_minimum = exclusive_minimum
+        self.exclusive_maximum = exclusive_maximum
+        self.kwargs = kwargs
+        super().__init__(schema, **kwargs)
 
+    def formatter(self, value):
+        return float(value)
+
+    def faker(self):
+        minimum = self.minimum or 0
+        maximum = self.maximum if self.maximum is not None else 1
+        epsilon = 1e-6  # 设置一个极小的正数 epsioln
+        if self.exclusive_minimum:
+            minimum += epsilon
+        if self.exclusive_maximum:
+            maximum -= epsilon
+        return round(random.uniform(minimum, maximum), 2)
+
+    def __class_getitem__(cls, item):
+        if isinstance(item, (int, float)):
+            return cls(default=item)
+
+        if isinstance(item, Float):  # 增加对于 Float[1<x<2]等格式的支持,copy操作
+            class_ = cls(item.minimum, item.maximum, item.exclusive_minimum, item.exclusive_maximum)
+            item.minimum = None  # copy 新类,旧的重置
+            item.maximum = None
+            item.exclusive_minimum = False
+            item.exclusive_maximum = False
+            return class_
+        raise KeyError(f"Key {item} not Support")
+
+    def __le__(self, n):
+        self.maximum = n
+        self.exclusive_maximum = False
+        return self
+
+    def __lt__(self, n):
+        self.maximum = n
+        self.exclusive_maximum = True
+        return self
+
+    def __ge__(self, n):
+        self.minimum = n
+        self.exclusive_minimum = False
+        return self
+
+    def __gt__(self, n):
+        self.minimum = n
+        self.exclusive_minimum = True
+        return self
+
+
+x = Float()  # 这是一个占位符 ,用于支持 Float[1<x<2] 语法
+
+class Bool(BaseField):
     def __init__(self, **kwargs):
-        super().__init__(format=self._format, **kwargs)
+        super().__init__({"type": "boolean"}, **kwargs)
 
-    def __class_getitem__(cls, format):  # 切片方法返回新类,同名同类
-        if format not in cls.subclasses:
-            name = "".join(format.replace("-", " ").title())
-            cls.subclasses[format] = type(name, (cls,), {"_format": format,"subclasses":{}})
-        return cls.subclasses[format]
+    def format(self, value):
+        return bool(value)
 
+    def faker(self):
+        return random.choice([True, False])
 
-UUID = Format["uuid"]
-Uri = Format["uri"]
-Email = Format["email"]
-Ipv4 = Format["ipv4"]
-Ipv6 = Format["ipv6"]
+    def __class_getitem__(cls, item):
+        return cls(default=bool(item))
 
-
-class Pattern(String):
-    """
-    example:
-       Pattern["^\d{5}$"] 表示符合正则表达式
-    """
-
-    _pattern = None
-    subclasses = {}
-
-    def __init__(self, pattern=None, **kwargs):
-        pat = pattern or self._pattern
-        if pat is None:
-            raise ValueError("Pattern is None")
-        self._check_pattern(pat)
-        super().__init__(pattern=pat, **kwargs)
-
-    @staticmethod
-    def _check_pattern(pat):
-        try:
-            re.compile(pat)
-        except re.error as e:
-            raise e
-
-    def __class_getitem__(cls, pattern):  # 切片方法返回新类,同名同类
-        cls._check_pattern(pattern)
-        if pattern not in cls.subclasses:
-            cls.subclasses[pattern] = type(f"Pattern{len(cls.subclasses)}", (cls,), {"_pattern": pattern,"subclasses":{}})
-        return cls.subclasses[pattern]
-
-
-class Literal(String):
-    """
-    example:
-        Literal["a","b"] 表示字面量
-    """
-
-    def __init__(self, *args, **kwargs):
-        if len(args) >= 1:
-            args = list(args)
-        else:
-            raise ValueError("Enum Args Lost")
-        super().__init__(enum=args, **kwargs)
-        
 
 class Date(BaseField):
     TYPE_MAPPING = {
@@ -861,164 +915,15 @@ class DateTime(Date):
         return converter(value)
 
 
-class Boolean(BaseField):
-    def __init__(self, **kwargs):
-        super().__init__({"type": "boolean"}, **kwargs)
-
-    def format(self, value):
-        return bool(value)
-
-    def faker(self):
-        return random.choice([True, False])
-
-
-class Bool(Boolean):
-    def __class_getitem__(cls, item):
-        return cls(default=bool(item))
-
-
-class Integer(BaseField):
-    url_rule_converter = "int"
-
-    def __init__(self, minimum=None, maximum=None, default=None, **kwargs):
-        schema = {"type": "integer"}
-        if minimum is not None:
-            schema["minimum"] = minimum
-        if maximum is not None:
-            schema["maximum"] = maximum
-        super().__init__(schema, default=default, **kwargs)
-
-    def formatter(self, value):
-        return int(value)
-
-    def faker(self):
-        minimum = self.response.get("minimum", 1)
-        maximum = self.response.get("maximum", 100)
-        return random.randint(minimum, maximum)
-
-
-class Int(Integer):
-    def __class_getitem__(cls, item):
-        if isinstance(item, slice):
-            return cls(item.start, item.stop)
-        if isinstance(item, tuple) and len(item) == 2:
-            if isinstance(item[0], slice) and isinstance(item[1], int):
-                return cls(item[0].start, item[0].stop, default=item[1])
-        if isinstance(item, int):
-            return cls(default=item)
-        raise KeyError(f"Key {item} not Support")
-
-
-class Number(BaseField):
-    def __init__(
-        self,
-        minimum=None,
-        maximum=None,
-        exclusive_minimum=False,
-        exclusive_maximum=False,
-        **kwargs,
-    ):
-        schema = {"type": "number"}
-        if minimum is not None:
-            schema["minimum"] = minimum
-            if exclusive_minimum:
-                schema["exclusiveMinimum"] = True
-        if maximum is not None:
-            schema["maximum"] = maximum
-            if exclusive_maximum:
-                schema["exclusiveMaximum"] = True
-        self.minimum = minimum
-        self.maximum = maximum
-        self.exclusive_minimum = exclusive_minimum
-        self.exclusive_maximum = exclusive_maximum
-        self.kwargs = kwargs
-        super().__init__(schema, **kwargs)
-
-    def formatter(self, value):
-        return float(value)
-
-    def faker(self):
-        minimum = self.minimum or 0
-        maximum = self.maximum if self.maximum is not None else 1
-        epsilon = 1e-6  # 设置一个极小的正数 epsioln
-        if self.exclusive_minimum:
-            minimum += epsilon
-        if self.exclusive_maximum:
-            maximum -= epsilon
-        return round(random.uniform(minimum, maximum), 2)
-
-
-class Float(Number):
-    def __class_getitem__(cls, item):
-        if isinstance(item, slice):
-            minimum, maximum, flag = item.start, item.stop, item.step
-            if flag is None:
-                flag = 0
-            return cls(minimum, maximum, flag >> 1 & 1, flag & 1)
-
-        if isinstance(item, tuple) and len(item) == 2:
-            if isinstance(item[0], slice):
-                flag = item[0].step or 0
-                return cls(item[0].start, item[0].stop, flag >> 1 & 1, flag & 1, default=item[1])
-
-        if isinstance(item, (int, float)):
-            return cls(default=item)
-
-        if isinstance(item, (Float, Number)):  # 增加对于 Float[1<x<2]等格式的支持,copy操作
-            class_ = cls(item.minimum, item.maximum, item.exclusive_minimum, item.exclusive_maximum)
-            item.minimum = None  # copy 新类,旧的重置
-            item.maximum = None
-            item.exclusive_minimum = False
-            item.exclusive_maximum = False
-            return class_
-        raise KeyError(f"Key {item} not Support")
-
-    def __le__(self, n):
-        self.maximum = n
-        self.exclusive_maximum = False
-        return self
-
-    def __lt__(self, n):
-        self.maximum = n
-        self.exclusive_maximum = True
-        return self
-
-    def __ge__(self, n):
-        self.minimum = n
-        self.exclusive_minimum = False
-        return self
-
-    def __gt__(self, n):
-        self.minimum = n
-        self.exclusive_minimum = True
-        return self
-
-
-x = Float()  # 这是一个占位符 ,用于支持 Float[1<x<2] 语法
-
-
-class AnyOf(BaseField):
-    """anyOf关键字表示一个模式可以匹配多个模式中的任意一个，
-    即任意一个模式匹配成功，则整个模式匹配成功。
-    anyOf关键字的使用场景是，需要指定一个字段可以匹配多种类型。
-    """
-
-    def __init__(self, *subschemas, **kwargs):
-        self.subschemas = [_field_from_object(self, sub) for sub in subschemas]
-        super().__init__({"anyOf": [subschema.response for subschema in self.subschemas]}, **kwargs)
-
-    def faker(self):
-        return random.choice(self.subschemas).faker()
-
-
-Union = AnyOf
-
 
 def _field_from_object(parent, schema):  # 从对象获取字段
     if isinstance(schema, type):
         container = schema()  # 类的实例
+    elif isinstance(schema, str):
+        container = Str[schema]
     else:
         container = schema  # 实例
+ 
     if not isinstance(container, Schema):  # 实例不是格式类
         raise RuntimeError(f"{parent} expected BaseField or Schema, but got {container.__class__.__name__}")
     if not isinstance(container, BaseField):  # 实例不是BaseField 类,是json
@@ -1026,7 +931,7 @@ def _field_from_object(parent, schema):  # 从对象获取字段
     return container
 
 
-class Array(BaseField, ResourceMixin):
+class List(BaseField, ResourceMixin):
     def __init__(self, schema, min_items=None, max_items=None, unique=None, **kwargs):
         self.container = container = _field_from_object(self, schema)
         schema_properties = [("type", "array")]
@@ -1067,8 +972,6 @@ class Array(BaseField, ResourceMixin):
     def faker(self):
         return [self.container.faker() for _ in range(self.response.get("minItems", 2))]
 
-
-class List(Array):
     def __class_getitem__(cls, item):
         if isinstance(item, tuple) and len(item) == 2:
             if isinstance(item[1], slice):
@@ -1091,7 +994,7 @@ class Tuple(BaseField):
         super().__init__(schema, **kwargs)
 
 
-class Object(BaseField, ResourceMixin):
+class Dict(BaseField, ResourceMixin):
     """
     在 JSON Schema 中，'patternProperties'是一个关键字，用于描述对象属性的模式。
     它是一个用于限制 JSON 数据中对象属性模式的关键字，可以用来描述对象中所有匹配某个
@@ -1141,7 +1044,7 @@ class Object(BaseField, ResourceMixin):
         self.other_props = None
 
         if properties is None and kwargs:
-            self.properties = {k: _field_from_object(self, v) for k, v in kwargs.items() if isinstance(v, (type, BaseField))}
+            self.properties = {k: _field_from_object(self, v) for k, v in kwargs.items() if isinstance(v, (type, BaseField,str))}
 
         elif isinstance(properties, dict):  # proprerties 是键名和字段的字典
             self.properties = {k: _field_from_object(self, v) for k, v in properties.items()}  # 如果不给字典，就没有这个属性
@@ -1242,8 +1145,6 @@ class Object(BaseField, ResourceMixin):
             output = {k: f().faker() if isinstance(f, type) else f.faker() for (k, f) in self.properties.items()}
         return output
 
-
-class Dict(Object):
     def __class_getitem__(cls, item):
         """
         1. Dict["self"]  # 表对自己的引用
@@ -1265,17 +1166,17 @@ class Dict(Object):
                 properties[key] = _field_from_object(cls, value)
             return cls(properties=properties)
 
-        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], Pattern) or issubclass(item[0], Pattern):
-            return cls(properties=item[1], pattern=item[0]._pattern)
+        if isinstance(item, tuple) and len(item) == 2 and item[0].startswith("^") and item[0].endswith("$"):
+            return cls(properties=item[1], pattern=item[0])
 
         return cls(item)
 
 
-class AttributeMapped(Object):
+class AttributeMapped(Dict):
     """
     def test_attribute_mapped(self):
-        o = fields.AttributeMapped(fields.Object({
-            "foo": fields.Integer()
+        o = fields.AttributeMapped(fields.Dict({
+            "foo": fields.Int()
         }), mapping_attribute="key", pattern="[A-Z][0-9]+")
 
         self.assertEqual([{'foo': 1, 'key': 'A3'}, {'foo': 1, 'key': 'B12'}],
@@ -1334,7 +1235,7 @@ class AttributeMapped(Object):
 
 
 # 使用的时候
-class InlineModel(Object):
+class InlineModel(Dict):
     def __init__(self, properties, model, **kwargs):
         super().__init__(properties, **kwargs)
         self.model = model
@@ -1493,7 +1394,7 @@ class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新
         return serializable_schema
 
 
-class ToMany(Array):
+class ToMany(List):
     def __init__(self, resource, **kwargs):
         super().__init__(Inline(resource, nullable=False), **kwargs)
 
@@ -1561,15 +1462,15 @@ class BaseFilter(Schema):
         if self.name in ("eq", "ne"):
             return self._field
         if self.name in ("in", "ni"):
-            return Array(self._field, min_items=0, unique=True)
+            return List(self._field, min_items=0, unique=True)
         if self.name == "ha":
             return self._field.container
         if self.name == "bt":
-            return Array(self._field, min_items=2, max_items=2)
+            return List(self._field, min_items=2, max_items=2)
         if self.name in ("ct", "ci", "sw", "si", "ew", "ei"):
-            return String(min_length=1)
+            return Str(min_length=1)
         if not isinstance(self._field, (Date, DateTime)):
-            return Number()
+            return Float()
         return self._field
 
     @property
@@ -1663,14 +1564,14 @@ SQLAlchemyFilter.register("bt", lambda c, v: c.between(v[0], v[1]))
 
 
 FIELD_FILTERS_DICT = {
-    Array: ("ha",),
-    Boolean: ("eq", "ne", "in", "ni"),
+    List: ("ha",),
+    Bool: ("eq", "ne", "in", "ni"),
     Date: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
     DateTime: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
-    Integer: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
+    Int: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
     ItemUri: ("eq", "ne", "in", "ni"),
-    Number: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
-    String: ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
+    Float: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
+    Str: ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
     ToMany: ("ha",),
     ToOne: ("eq", "ne", "in", "ni"),
     Uri: ("eq", "ne", "in", "ni"),
@@ -2291,7 +2192,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     return target_item
 
                 yield relations_route.for_method(
-                    "PATCH",
+                    "PUT",
                     update_relation_instance,
                     rel=camel_case(f"update_{self.attribute}"),
                     response_schema=ToOne(self.target),
@@ -2321,8 +2222,8 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     response_schema=RelationInstances(self.target),
                     schema=FieldSet(
                         {
-                            PAGE: Integer(minimum=1, default=1),
-                            PER_PAGE: Integer(minimum=1, default=20, maximum=50),
+                            PAGE: Int(minimum=1, default=1),
+                            PER_PAGE: Int(minimum=1, default=20, maximum=50),
                         }
                     ),
                 )
@@ -2520,7 +2421,25 @@ class ModelResourceMeta(ResourceMeta):
         return class_
 
 
-RFC6902_PATCH = Array(Object({"op": String(enum=("add", "replace", "remove", "move", "copy", "test")), "path": String(pattern="^/.+"), "value": Any(nullable=True)}))
+RFC6902_PATCH = List(Dict({"op": Str(enum=("add", "replace", "remove", "move", "copy", "test")), "path": Str(pattern="^/.+"), "value": Any(nullable=True)}))
+
+# RFC6902_PATCH_SCHEMA = List[Dict["op":Str["add|replace|remove|move|copy|test"],"path":Str["^/.+$"],"value":Optional[Any]]]
+L = List
+I = Int
+D = Dict
+F = Float
+S = Str
+B = Bool
+A = Any
+O = Optional
+R = ReadOnly
+C = CreateOnly
+W = WriteOnly
+U = UpdateOnly
+
+RFC6902_PATCH_SCHEMA = List[Dict(op=Str["add|replace|remove|move|copy|test"],path=Str["^/.+$"],value=Optional[Any])]
+#
+# RFC6902_PATCH_SCHEMA = LD(op="add|replace|remove|move|copy|test",path="^/.+$",value=A)
 
 
 class ModelResource(Resource, metaclass=ModelResourceMeta):
@@ -2705,7 +2624,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         id_attribute = None  # id
         sort_attribute = None  # 排序列
         id_converter = None  # string
-        id_field_class = Integer  # id域的类
+        id_field_class = Int  # id域的类
         include_id = False  # 包括id
         include_type = False  # 包括类型
         manager = None  # 数据库管理
@@ -2850,10 +2769,10 @@ class Manager:
         return isinstance(
             field,
             (
-                String,
-                Boolean,
-                Number,
-                Integer,
+                Str,
+                Bool,
+                Float,
+                Int,
                 Date,
                 DateTime,
                 Uri,
@@ -2884,15 +2803,15 @@ class Manager:
     def _get_field_from_python_type(python_type):
         try:
             return {
-                str: String,
-                int: Integer,
-                float: Number,
-                bool: Boolean,
-                list: Array,
-                dict: Object,
+                str: Str,
+                int: Int,
+                float: Float,
+                bool: Bool,
+                list: List,
+                dict: Dict,
                 date: Date,
                 datetime: DateTime,
-                decimal.Decimal: Number,
+                decimal.Decimal: Float,
             }[python_type]
         except KeyError:
             raise RuntimeError(f'No appropriate field class for "{python_type}" type found')
@@ -3140,16 +3059,16 @@ class SQLAlchemyManager(RelationalManager):
         kwargs = {}
 
         if isinstance(column.type, postgresql.ARRAY):
-            field_class = Array
-            args = (String,)
+            field_class = List
+            args = (Str,)
         elif isinstance(column.type, postgresql.UUID):
             field_class = UUID
         elif isinstance(column.type, String_) and column.type.length:
-            field_class = String
+            field_class = Str
             kwargs = {"max_length": column.type.length}
         elif isinstance(column.type, postgresql.HSTORE):
-            field_class = Object
-            args = (String,)
+            field_class = Dict
+            args = (Str,)
         elif hasattr(postgresql, "JSON") and isinstance(column.type, (postgresql.JSON, postgresql.JSONB)):
             field_class = BaseField
             kwargs = {"schema": {}}

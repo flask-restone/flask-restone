@@ -606,7 +606,7 @@ class CreateOnly(WriteOnly):
 
 
 class UpdateOnly(WriteOnly):
-    io = "r"
+    io = "u"
 
 
 class Str(BaseField):

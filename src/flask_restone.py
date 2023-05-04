@@ -20,9 +20,12 @@ from flask import current_app, g, json, jsonify, make_response, request
 from flask.globals import app_ctx, request_ctx
 from flask_principal import ItemNeed, Permission, RoleNeed, UserNeed
 from flask_sqlalchemy import Pagination as SAPagination
-from jsonschema import (Draft4Validator, FormatChecker,
-                        ValidationError as _ValidationError)
-from sqlalchemy import String as String_, and_, or_
+from jsonschema import (
+    Draft4Validator,
+    FormatChecker,
+    ValidationError as _ValidationError,
+)
+from sqlalchemy import String, and_, or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased, class_mapper
@@ -415,7 +418,7 @@ def _bind_schema(schema, resource) -> Schema:  # 将格式与资源绑定
 
 
 # ----------------字段格式------------
-class BaseField(Schema):
+class Field(Schema):
     """
     基本字段模式
     属性：
@@ -555,12 +558,15 @@ class BaseField(Schema):
         return f"{self.attribute}"
 
 
-class Any(BaseField):
+class Any(Field):
     def __init__(self, **kwargs):
-        super().__init__({"type": ["null", "string", "number", "boolean", "object", "array"]}, **kwargs)
+        super().__init__(
+            {"type": ["null", "string", "number", "boolean", "object", "array"]},
+            **kwargs,
+        )
 
 
-class Union(BaseField):
+class Union(Field):
     def __init__(self, *subschemas, **kwargs):
         self.subschemas = [_field_from_object(self, sub) for sub in subschemas]
         super().__init__({"anyOf": [subschema.response for subschema in self.subschemas]}, **kwargs)
@@ -569,7 +575,7 @@ class Union(BaseField):
         return random.choice(self.subschemas).faker()
 
 
-class Optional(BaseField):
+class Optional(Field):
     """提议
     兼容 Optional[Int]
     和 Optional|Int
@@ -581,7 +587,7 @@ class Optional(BaseField):
         return schema
 
 
-class ReadOnly(BaseField):
+class ReadOnly(Field):
     """模仿不可变参数，表达只读属性"""
 
     io = "r"
@@ -592,7 +598,7 @@ class ReadOnly(BaseField):
         return schema
 
 
-class WriteOnly(BaseField):
+class WriteOnly(Field):
     io = "r"
 
     def __class_getitem__(cls, schema):
@@ -609,7 +615,7 @@ class UpdateOnly(WriteOnly):
     io = "u"
 
 
-class Str(BaseField):
+class Str(Field):
     """
     JSON Schema的string类型的format包括：
 
@@ -716,7 +722,7 @@ Ipv4 = Str["%ipv4%"]
 Ipv6 = Str["%ipv6%"]
 
 
-class Int(BaseField):
+class Int(Field):
     url_rule_converter = "int"
 
     def __init__(self, minimum=None, maximum=None, /, default=None, **kwargs):
@@ -749,7 +755,7 @@ class Int(BaseField):
         raise KeyError(f"Key {item} not Support")
 
 
-class Float(BaseField):
+class Float(Field):
     def __init__(
         self,
         minimum=None,
@@ -792,7 +798,12 @@ class Float(BaseField):
             return cls(default=item)
 
         if isinstance(item, Float):  # 增加对于 Float[1<x<2]等格式的支持,copy操作
-            class_ = cls(item.minimum, item.maximum, item.exclusive_minimum, item.exclusive_maximum)
+            class_ = cls(
+                item.minimum,
+                item.maximum,
+                item.exclusive_minimum,
+                item.exclusive_maximum,
+            )
             item.minimum = None  # copy 新类,旧的重置
             item.maximum = None
             item.exclusive_minimum = False
@@ -823,7 +834,8 @@ class Float(BaseField):
 
 x = Float()  # 这是一个占位符 ,用于支持 Float[1<x<2] 语法
 
-class Bool(BaseField):
+
+class Bool(Field):
     def __init__(self, **kwargs):
         super().__init__({"type": "boolean"}, **kwargs)
 
@@ -837,7 +849,7 @@ class Bool(BaseField):
         return cls(default=bool(item))
 
 
-class Date(BaseField):
+class Date(Field):
     TYPE_MAPPING = {
         "string": {"type": "string", "format": "date"},
         "integer": {"type": "integer"},
@@ -909,7 +921,6 @@ class DateTime(Date):
         return converter(value)
 
 
-
 def _field_from_object(parent, schema):  # 从对象获取字段
     if isinstance(schema, type):
         container = schema()  # 类的实例
@@ -917,15 +928,15 @@ def _field_from_object(parent, schema):  # 从对象获取字段
         container = Str[schema]
     else:
         container = schema  # 实例
- 
+
     if not isinstance(container, Schema):  # 实例不是格式类
         raise RuntimeError(f"{parent} expected BaseField or Schema, but got {container.__class__.__name__}")
-    if not isinstance(container, BaseField):  # 实例不是BaseField 类,是json
-        container = BaseField(container)
+    if not isinstance(container, Field):  # 实例不是BaseField 类,是json
+        container = Field(container)
     return container
 
 
-class List(BaseField, ResourceMixin):
+class List(Field, ResourceMixin):
     def __init__(self, schema, min_items=None, max_items=None, unique=None, **kwargs):
         self.container = container = _field_from_object(self, schema)
         schema_properties = [("type", "array")]
@@ -973,22 +984,27 @@ class List(BaseField, ResourceMixin):
                 return cls(item[0], min_items, max_items, unique)
             elif isinstance(item[1], int):
                 return cls(item[0], item[1], item[1])
-        elif isinstance(item, BaseField):
+        elif isinstance(item, Field):
             return cls(item)
         raise KeyError(f"Key {item} not Support")
 
 
-class Tuple(BaseField):
+class Tuple(Field):
     """表示固定长度的列表元组"""
 
     def __init__(self, *schemas, **kwargs):
         schemas = [_field_from_object(self, item) for item in schemas]
         count = len(schemas)
-        schema = {"type": "array", "items": [schema.response for schema in schemas], "minItems": count, "maxItems": count}
+        schema = {
+            "type": "array",
+            "items": [schema.response for schema in schemas],
+            "minItems": count,
+            "maxItems": count,
+        }
         super().__init__(schema, **kwargs)
 
 
-class Dict(BaseField, ResourceMixin):
+class Dict(Field, ResourceMixin):
     """
     在 JSON Schema 中，'patternProperties'是一个关键字，用于描述对象属性的模式。
     它是一个用于限制 JSON 数据中对象属性模式的关键字，可以用来描述对象中所有匹配某个
@@ -1038,21 +1054,21 @@ class Dict(BaseField, ResourceMixin):
         self.other_props = None
 
         if properties is None and kwargs:
-            self.properties = {k: _field_from_object(self, v) for k, v in kwargs.items() if isinstance(v, (type, BaseField,str))}
+            self.properties = {k: _field_from_object(self, v) for k, v in kwargs.items() if isinstance(v, (type, Field, str))}
 
         elif isinstance(properties, dict):  # proprerties 是键名和字段的字典
             self.properties = {k: _field_from_object(self, v) for k, v in properties.items()}  # 如果不给字典，就没有这个属性
-        elif isinstance(properties, (type, BaseField)):  # 类或字段
+        elif isinstance(properties, (type, Field)):  # 类或字段
             field = _field_from_object(self, properties)
             if pattern:
                 self.pattern_props = {pattern: field}
             else:
                 self.other_props = field
-        if isinstance(other_props, (type, BaseField)):
+        if isinstance(other_props, (type, Field)):
             self.other_props = _field_from_object(self, other_props)
         elif other_props is True:
             self.other_props = Any()
-        if isinstance(pattern_props, (type, BaseField)):
+        if isinstance(pattern_props, (type, Field)):
             self.pattern_props = _field_from_object(self, pattern_props)
         elif isinstance(pattern_props, dict):
             self.pattern_props = {p: _field_from_object(self, f) for (p, f) in pattern_props.items()}
@@ -1077,7 +1093,15 @@ class Dict(BaseField, ResourceMixin):
         if self.pattern_props and (len(self.pattern_props) > 1 or self.other_props):
             raise NotImplementedError("Only one pattern property is currently supported and it cannot be combined with additionalProperties")
 
-        super().__init__(schema, io=io, default=default, attribute=attribute, nullable=nullable, title=title, description=description)
+        super().__init__(
+            schema,
+            io=io,
+            default=default,
+            attribute=attribute,
+            nullable=nullable,
+            title=title,
+            description=description,
+        )
 
     def bind(self, resource):
         # 满足某个模式的字段都用一个字段类，比如 {{".*_time":DateTime}}
@@ -1179,7 +1203,7 @@ class InlineModel(Dict):
         return instance
 
 
-class ResourceReference:
+class ResourceRef:
     def __init__(self, value):
         self.value = value
 
@@ -1207,13 +1231,10 @@ class ResourceReference:
         return f"<ResourceReference '{self.value}'>"
 
 
-class ToOne(BaseField, ResourceMixin):
-    """
-    ToOne 是将一个 object 的内容整合成一个条目
-    """
+class ToOne(Field, ResourceMixin):
 
     def __init__(self, resource, **kwargs):  # resource可以是名称
-        self.target_reference = ResourceReference(resource)
+        self.target_reference = ResourceRef(resource)
 
         def schema():
             # key_converters 是个元组，第一个是响应体中的键转换器，第二个是请求体中的键转换器
@@ -1263,7 +1284,7 @@ class ToOne(BaseField, ResourceMixin):
                 return self.target.meta.key_converters_by_type[json_type].convert(value)
 
 
-class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新
+class Inline(Field, ResourceMixin):  # 内联 默认不可更新
     """内联对象就是将一个资源完整嵌入
 
     JSON Schema 可以使用 $ref 关键字来表示递归的数据结构。
@@ -1272,7 +1293,7 @@ class Inline(BaseField, ResourceMixin):  # 内联 默认不可更新
     """
 
     def __init__(self, resource, patchable=False, **kwargs):
-        self.target_reference = ResourceReference(resource)
+        self.target_reference = ResourceRef(resource)
         self.patchable = patchable
 
         def schema():
@@ -1331,7 +1352,7 @@ class ToMany(List):
         super().__init__(Inline(resource, nullable=False), **kwargs)
 
 
-class ItemType(BaseField):
+class ItemType(Field):
     def __init__(self, resource):
         self.resource = resource
         super().__init__(lambda: {"type": "string", "enum": [self.resource.meta.name]}, io="r")
@@ -1343,9 +1364,9 @@ class ItemType(BaseField):
         return self.resource.meta.name
 
 
-class ItemUri(BaseField):
+class ItemUri(Field):
     def __init__(self, resource, attribute=None):
-        self.target_reference = ResourceReference(resource)
+        self.target_reference = ResourceRef(resource)
         super().__init__(
             lambda: {
                 "type": "string",
@@ -1431,7 +1452,11 @@ class BaseFilter(Schema):
 
     @classmethod
     def make_filter(cls, name, func):
-        return type(name.upper(), (cls,), {"op": classmethod(lambda s, a, b: func(a, b)), "name": name})
+        return type(
+            name.upper(),
+            (cls,),
+            {"op": classmethod(lambda s, a, b: func(a, b)), "name": name},
+        )
 
     @classmethod
     def register(cls, name, func):  # 类方法返回子类
@@ -1474,7 +1499,11 @@ class SQLAlchemyFilter(BaseFilter):
 
     @classmethod
     def make_filter(cls, name, func):
-        return type(name.upper(), (cls,), {"expression": lambda self, value: func(self.column, value), "name": name})
+        return type(
+            name.upper(),
+            (cls,),
+            {"expression": lambda self, value: func(self.column, value), "name": name},
+        )
 
 
 SQLAlchemyFilter.register("eq", lambda c, v: c == v)  # 隐式的创建过滤器
@@ -1496,13 +1525,13 @@ SQLAlchemyFilter.register("bt", lambda c, v: c.between(v[0], v[1]))
 
 
 FIELD_FILTERS_DICT = {
-    List: ("ha",),
     Bool: ("eq", "ne", "in", "ni"),
     Date: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
     DateTime: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
+    Float: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
     Int: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
     ItemUri: ("eq", "ne", "in", "ni"),
-    Float: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
+    List: ("ha",),
     Str: ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
     ToMany: ("ha",),
     ToOne: ("eq", "ne", "in", "ni"),
@@ -2001,7 +2030,7 @@ class Route:
         if isinstance(self.response_schema, (Instances, Inline)):
             response_schema = _bind_schema(self.response_schema, resource)
             return response_schema.example()
-        elif isinstance(self.response_schema, BaseField):
+        elif isinstance(self.response_schema, Field):
             response_schema = self.response_schema.response
             response_schema["example"] = self.response_schema.faker()
             return response_schema
@@ -2074,9 +2103,9 @@ class RouteSet:
         return ()
 
 
-class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
+class RelaRoute(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
     def __init__(self, resource, uselist=True, io="rw", attribute=None):
-        self.reference = ResourceReference(resource)  # 找到关联的资源类
+        self.reference = ResourceRef(resource)  # 找到关联的资源类
         self.attribute = attribute  # 属性名
         self.io = io
         self.uselist = uselist
@@ -2138,7 +2167,11 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     self.target.manager.delete(target_item)
                     return None, 204
 
-                yield relations_route.for_method("DELETE", delete_relation_instance, rel=camel_case(f"remove_{self.attribute}"))
+                yield relations_route.for_method(
+                    "DELETE",
+                    delete_relation_instance,
+                    rel=camel_case(f"remove_{self.attribute}"),
+                )
         else:
             if "r" in io:
 
@@ -2180,7 +2213,11 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     resource.manager.commit()
                     return None, 204
 
-                yield relation_route.for_method("DELETE", relation_remove, rel=camel_case(f"remove_{self.attribute}"))
+                yield relation_route.for_method(
+                    "DELETE",
+                    relation_remove,
+                    rel=camel_case(f"remove_{self.attribute}"),
+                )
 
 
 class AttrRoute(RouteSet):  # 单个记录的属性路由
@@ -2224,7 +2261,7 @@ class AttrRoute(RouteSet):  # 单个记录的属性路由
             )
 
 
-class AttributeDict(dict):
+class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
 
@@ -2233,7 +2270,7 @@ class ResourceMeta(type):
     def __new__(mcs, name, bases, members):
         class_ = super(ResourceMeta, mcs).__new__(mcs, name, bases, members)
         class_.routes = routes = dict(getattr(class_, "routes") or {})
-        class_.meta = meta = AttributeDict(getattr(class_, "meta", {}) or {})
+        class_.meta = meta = AttrDict(getattr(class_, "meta", {}) or {})
 
         def add_route(routes, route, name):
             if route.attribute is None:
@@ -2353,10 +2390,24 @@ class ModelResourceMeta(ResourceMeta):
         return class_
 
 
-RFC6902_PATCH = List(Dict({"op": Str(enum=("add", "replace", "remove", "move", "copy", "test")), "path": Str(pattern="^/.+"), "value": Any(nullable=True)}))
+RFC6902_PATCH = List(
+    Dict(
+        {
+            "op": Str(enum=("add", "replace", "remove", "move", "copy", "test")),
+            "path": Str(pattern="^/.+"),
+            "value": Any(nullable=True),
+        }
+    )
+)
 
 
-RFC6902_PATCH_SCHEMA = List[Dict(op=Str["add|replace|remove|move|copy|test"],path=Str["^/.+$"],value=Optional[Any])]
+RFC6902_PATCH_SCHEMA = List[
+    Dict(
+        op=Str["add|replace|remove|move|copy|test"],
+        path=Str["^/.+$"],
+        value=Optional[Any],
+    )
+]
 #
 # RFC6902_PATCH_SCHEMA = LD(op="add|replace|remove|move|copy|test",path="^/.+$",value=A)
 
@@ -2781,7 +2832,7 @@ class Manager:
         pass
 
 
-class RelationalManager(Manager):
+class RelationManager(Manager):
     def _query(self):
         raise NotImplementedError
 
@@ -2905,7 +2956,7 @@ class RelationalManager(Manager):
                     raise InvalidFilter(f"Filter <{name}> is not allowed")
 
 
-class SQLAlchemyManager(RelationalManager):
+class SQLAlchemyManager(RelationManager):
     base_filter = SQLAlchemyFilter
     PAGINATION_TYPES = (Pagination, SAPagination)
 
@@ -2982,14 +3033,14 @@ class SQLAlchemyManager(RelationalManager):
             args = (Str,)
         elif isinstance(column.type, postgresql.UUID):
             field_class = UUID
-        elif isinstance(column.type, String_) and column.type.length:
+        elif isinstance(column.type, String) and column.type.length:
             field_class = Str
             kwargs = {"max_length": column.type.length}
         elif isinstance(column.type, postgresql.HSTORE):
             field_class = Dict
             args = (Str,)
         elif hasattr(postgresql, "JSON") and isinstance(column.type, (postgresql.JSON, postgresql.JSONB)):
-            field_class = BaseField
+            field_class = Field
             kwargs = {"schema": {}}
         else:
             try:
@@ -3519,8 +3570,8 @@ class PrincipalMixin:  # 鉴权插件
 
 
 def principals(manager):
-    if not issubclass(manager, RelationalManager):
-        raise RuntimeError("principals() only works with managers that inherit from RelationalManager")
+    if not issubclass(manager, RelationManager):
+        raise RuntimeError("principals() only works with managers that inherit from RelationManager")
 
     class PrincipalsManager(PrincipalMixin, manager):
         pass
@@ -3563,12 +3614,23 @@ def schema_to_swag_dict(route, resource):
     rel_cn = HTTP_VERBS_CN.get(rel, None)
     title = rel_cn.format(tags[0]) if rel_cn else rel
     summary = route.description or title
-    flasgger_dict = {"summary": summary, "tags": tags or [], "parameters": [], "responses": {"200": {"description": "success", "examples": ""}}}
+    flasgger_dict = {
+        "summary": summary,
+        "tags": tags or [],
+        "parameters": [],
+        "responses": {"200": {"description": "success", "examples": ""}},
+    }
 
     _schema = schema.get("schema", {})
 
     if "{id}" in href:
-        parameter = {"in": "path", "name": "id", "type": "string", "required": True, "description": f"the ID of the {resource.meta.name}"}
+        parameter = {
+            "in": "path",
+            "name": "id",
+            "type": "string",
+            "required": True,
+            "description": f"the ID of the {resource.meta.name}",
+        }
         flasgger_dict["parameters"].append(parameter)
 
     if method == "GET":
@@ -3598,7 +3660,10 @@ def schema_to_swag_dict(route, resource):
         # if rel in ("self","instances"):
         # 获取输出样例
         response_schema = route.response_example(resource)
-        flasgger_dict["responses"]["200"] = {"description": "success", "schema": response_schema}
+        flasgger_dict["responses"]["200"] = {
+            "description": "success",
+            "schema": response_schema,
+        }
 
     elif method[0] == "P":
         if rel == "create":
@@ -3620,7 +3685,10 @@ def schema_to_swag_dict(route, resource):
             }
         )
 
-        flasgger_dict["responses"]["200"] = {"description": "success", "examples": '{"result":"success"}'}
+        flasgger_dict["responses"]["200"] = {
+            "description": "success",
+            "examples": '{"result":"success"}',
+        }
 
     return flasgger_dict
 

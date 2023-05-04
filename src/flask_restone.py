@@ -629,12 +629,6 @@ class Str(BaseField):
     relative-json-pointer：相对JSON指针格式，如：2/property
     regex：正则表达式格式，如：^[a-z]+$
     uuid：UUID格式，如：123e4567-e89b-12d3-a456-426655440000
-
-    example:
-        Str[0:6] 表示长度为0到6
-        Str[6] 表示长度为6
-        Str[6:] 表示最小长度为6
-        Str[:6,"default"] 表示最大长度为6
     """
 
     url_rule_converter = "string"
@@ -1170,68 +1164,6 @@ class Dict(BaseField, ResourceMixin):
             return cls(properties=item[1], pattern=item[0])
 
         return cls(item)
-
-
-class AttributeMapped(Dict):
-    """
-    def test_attribute_mapped(self):
-        o = fields.AttributeMapped(fields.Dict({
-            "foo": fields.Int()
-        }), mapping_attribute="key", pattern="[A-Z][0-9]+")
-
-        self.assertEqual([{'foo': 1, 'key': 'A3'}, {'foo': 1, 'key': 'B12'}],
-                         sorted(o.convert({"A3": {"foo": 1}, "B12": {"foo": 1}}), key=itemgetter("key")))
-
-        self.assertEqual({"A3": {"foo": 1}, "B12": {"foo": 2}},
-                         o.format([{'foo': 1, 'key': 'A3'}, {'foo': 2, 'key': 'B12'}]))
-
-        self.assertEqual({
-                             "type": "object",
-                             "additionalProperties": False,
-                             "patternProperties": {
-                                 "[A-Z][0-9]+": {
-                                    "additionalProperties": False,
-                                     "properties": {
-                                         "foo": {"type": "integer"}
-                                     },
-                                     "type": "object"
-                                 }
-                             }
-                         }, o.response)
-    """
-
-    def __init__(self, schema, mapping_attribute=None, **kwargs):
-        self.mapping_attribute = mapping_attribute
-        super().__init__(schema, **kwargs)
-
-    def _set_mapping_attribute(self, obj, value):
-        if isinstance(obj, dict):
-            obj[self.mapping_attribute] = value
-        else:
-            setattr(obj, self.mapping_attribute, value)
-        return obj
-
-    def formatter(self, value):
-        if self.pattern_props:
-            field = next(iter(self.pattern_props.values()))
-            return {get_value(self.mapping_attribute, v, None): field.format(v) for v in value}
-        if self.other_props:
-            return {get_value(self.mapping_attribute, v, None): self.other_props.format(v) for v in value}
-        return {}
-
-    def converter(self, value):
-        if self.pattern_props:
-            field = next(iter(self.pattern_props.values()))
-            return [
-                self._set_mapping_attribute(
-                    field.convert(v),
-                    k,
-                )
-                for (k, v) in value.items()
-            ]
-        if self.other_props:
-            return [self._set_mapping_attribute(self.other_props.convert(v), k) for (k, v) in value.items()]
-        return {}
 
 
 # 使用的时候
@@ -2174,7 +2106,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
 
                 def create_relation_instance(resource, item, properties):  # 一对一
                     target_item = self.target.manager.create(properties)
-                    resource.manager.update(item, {self.attribute: self.target})
+                    resource.manager.update(item, {self.attribute: target_item})
                     return target_item
 
                 yield relations_route.for_method(
@@ -2423,19 +2355,6 @@ class ModelResourceMeta(ResourceMeta):
 
 RFC6902_PATCH = List(Dict({"op": Str(enum=("add", "replace", "remove", "move", "copy", "test")), "path": Str(pattern="^/.+"), "value": Any(nullable=True)}))
 
-# RFC6902_PATCH_SCHEMA = List[Dict["op":Str["add|replace|remove|move|copy|test"],"path":Str["^/.+$"],"value":Optional[Any]]]
-L = List
-I = Int
-D = Dict
-F = Float
-S = Str
-B = Bool
-A = Any
-O = Optional
-R = ReadOnly
-C = CreateOnly
-W = WriteOnly
-U = UpdateOnly
 
 RFC6902_PATCH_SCHEMA = List[Dict(op=Str["add|replace|remove|move|copy|test"],path=Str["^/.+$"],value=Optional[Any])]
 #

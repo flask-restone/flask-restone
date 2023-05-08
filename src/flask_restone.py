@@ -1,6 +1,6 @@
 # restone makes you the rest one
 
-
+from abc import ABC, abstractmethod
 import decimal
 import inspect
 import random
@@ -180,7 +180,7 @@ class Forbidden(RestoneException):
 # 是一个描述清晰、人机可读的文档；
 # 自动测试、验证客户端提交的数据；
 # ---------------------------请求与响应格式----------------------
-class Schema:
+class Schema(ABC):
     """
     Schema 描述JSON数据格式
 
@@ -196,8 +196,9 @@ class Schema:
     """
 
     # schema 就是规则格式，子类需实现 schema 语法和 format 格式化方法
+    @abstractmethod
     def schema(self):  # 二元组就是 rsp,rqs
-        raise NotImplementedError
+        pass
 
     @cached_property
     def response(self):
@@ -381,9 +382,6 @@ class Field(Schema):
     def output(self, key, obj):
         key = self.attribute or key
         return self.format(get_value(key, obj, self.default))
-
-    # def __repr__(self):
-    #     return f"{self.__class__.__name__}(attribute={repr(self.attribute)})"
 
     def faker(self):
         """假数据生成，用于测试"""
@@ -1760,9 +1758,6 @@ class Key(Schema, ResourceMixin):
     def rebind(self, resource):
         return self.__class__().bind(resource=resource)
 
-    def schema(self):
-        raise NotImplementedError
-
 
 class RefKey(Key):
     def matcher_type(self):
@@ -2130,9 +2125,10 @@ class ItemRoute(Route):  # 单个记录
         return view
 
 
-class RouteSet:
+class RouteSet(ABC):
+    @abstractmethod
     def routes(self):
-        return ()
+        pass
 
 
 class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
@@ -2433,15 +2429,6 @@ RFC6902_PATCH = List(
         }
     )
 )
-
-
-RFC6902_PATCH_SCHEMA = List[
-    Dict(
-        op=Str["add|replace|remove|move|copy|test"],
-        path=Str["^/.+$"],
-        value=Optional[Any],
-    )
-]
 
 
 class ModelResource(Resource, metaclass=ModelResourceMeta):

@@ -1000,7 +1000,6 @@ class Dict(Field, ResourceMixin):
         return cls(item)
 
 
-# 使用的时候
 class InlineModel(Dict):
     def __init__(self, properties, model, **kwargs):
         super().__init__(properties, **kwargs)
@@ -1410,154 +1409,6 @@ class FieldSet(Schema, ResourceMixin):
         )
 
 
-# -------------------过滤器-------------------------------------
-class Condition:  # 属性 过滤器 值
-    def __init__(self, attribute, filter, value):
-        self.attribute = attribute
-        self.filter = filter
-        self.value = value
-
-    def __call__(self, item):
-        return self.filter.op(get_value(self.attribute, item, None), self.value)
-
-
-class BaseFilter(Schema):
-    name = None
-    filters = {}
-
-    def __init__(self, field=None, attribute=None):
-        self._attribute = attribute
-        self._field = field
-
-    @property
-    def field(self):  # 被过滤的字段,只是使用field.convert
-        if self.name in ("eq", "ne"):
-            return self._field
-        if self.name in ("in", "ni"):
-            return List(self._field, min_items=0, unique=True)
-        if self.name == "ha":
-            return self._field.container
-        if self.name == "bt":
-            return List(self._field, min_items=2, max_items=2)
-        if self.name in ("ct", "ci", "sw", "si", "ew", "ei"):
-            return Str(min_length=1)
-        if not isinstance(self._field, (Date, DateTime)):
-            return Float()
-        return self._field
-
-    @property
-    def attribute(self):
-        return self._attribute or self.field.attribute
-
-    def convert(self, instance, **kwargs):
-        if self.name is None:  # 过滤器的转换就是所过滤字段的转换
-            return Condition(self.attribute, self, self.field.convert(instance))
-        return Condition(self.attribute, self, self.field.convert(instance[f"${self.name}"]))
-
-    def schema(self):  # 过滤器只能针对请求模式，过滤器的模式就是所过滤字段的请求模式
-        schema = self.field.request
-        if schema:
-            _schema = {k: v for k, v in schema.items() if k != "readOnly"}
-        else:
-            _schema = schema
-        if self.name is None:
-            return _schema
-        return {
-            "type": "object",
-            "properties": {f"${self.name}": _schema},
-            "required": [f"${self.name}"],
-            "additionalProperties": False,
-        }
-
-    @classmethod
-    def make_filter(cls, name, func):
-        return type(
-            name.upper(),
-            (cls,),
-            {"op": classmethod(lambda s, a, b: func(a, b)), "name": name},
-        )
-
-    @classmethod
-    def register(cls, name, func):  # 类方法返回子类
-        class_ = cls.make_filter(name, func)
-        cls.filters[name] = class_
-
-
-# 属性过滤
-BaseFilter.register("lt", lambda a, b: a < b)
-BaseFilter.register("gt", lambda a, b: a > b)
-BaseFilter.register("eq", lambda a, b: a == b)
-BaseFilter.register("ne", lambda a, b: a != b)
-BaseFilter.register("le", lambda a, b: a <= b)
-BaseFilter.register("ge", lambda a, b: a >= b)
-BaseFilter.register("in", lambda a, b: a in b)
-BaseFilter.register("ni", lambda a, b: a not in b)
-BaseFilter.register("ha", lambda a, b: hasattr(a, "__iter__") and b in a)
-BaseFilter.register("ct", lambda a, b: a and b in a)
-BaseFilter.register("ci", lambda a, b: a and b.lower() in a.lower())
-BaseFilter.register("sw", lambda a, b: a.startswith(b))
-BaseFilter.register("si", lambda a, b: a.lower().startswith(b.lower()))
-BaseFilter.register("ew", lambda a, b: a.endswith(b))
-BaseFilter.register("ei", lambda a, b: a.lower().endswith(b.lower()))
-BaseFilter.register("bt", lambda a, b: b[0] <= a <= b[1])
-
-
-class SQLAlchemyFilter(BaseFilter):
-    filters = {}
-
-    def __init__(self, field=None, attribute=None, column=None):
-        super().__init__(field=field, attribute=attribute)
-        self.column = column
-
-    @classmethod
-    def apply(cls, query, conditions):
-        expressions = [condition.filter.expression(condition.value) for condition in conditions]
-        if len(expressions) == 1:
-            return query.filter(expressions[0])
-        return query.filter(and_(*expressions))
-
-    @classmethod
-    def make_filter(cls, name, func):
-        return type(
-            name.upper(),
-            (cls,),
-            {"expression": lambda self, value: func(self.column, value), "name": name},
-        )
-
-
-SQLAlchemyFilter.register("eq", lambda c, v: c == v)  # 隐式的创建过滤器
-SQLAlchemyFilter.register("ne", lambda c, v: c != v)
-SQLAlchemyFilter.register("lt", lambda c, v: c < v)
-SQLAlchemyFilter.register("le", lambda c, v: c <= v)
-SQLAlchemyFilter.register("gt", lambda c, v: c > v)
-SQLAlchemyFilter.register("ge", lambda c, v: c >= v)
-SQLAlchemyFilter.register("in", lambda c, v: c.in_(v) if len(v) else False)
-SQLAlchemyFilter.register("ni", lambda c, v: c.notin_(v) if len(v) else True)
-SQLAlchemyFilter.register("ha", lambda c, v: c.contains(v))
-SQLAlchemyFilter.register("ct", lambda c, v: c.like("%" + v.replace("%", "\\%") + "%"))
-SQLAlchemyFilter.register("ci", lambda c, v: c.ilike("%" + v.replace("%", "\\%") + "%"))
-SQLAlchemyFilter.register("sw", lambda c, v: c.startswith(v.replace("%", "\\%")))
-SQLAlchemyFilter.register("si", lambda c, v: c.ilike(v.replace("%", "\\%") + "%"))
-SQLAlchemyFilter.register("ew", lambda c, v: c.endswith(v.replace("%", "\\%")))
-SQLAlchemyFilter.register("ei", lambda c, v: c.ilike("%" + v.replace("%", "\\%")))
-SQLAlchemyFilter.register("bt", lambda c, v: c.between(v[0], v[1]))
-
-
-FIELD_FILTERS_DICT = {
-    Bool: ("eq", "ne", "in", "ni"),
-    Date: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
-    DateTime: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
-    Float: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
-    Int: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
-    ItemUri: ("eq", "ne", "in", "ni"),
-    List: ("ha",),
-    Str: ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
-    ToMany: ("ha",),
-    ToOne: ("eq", "ne", "in", "ni"),
-    Uri: ("eq", "ne", "in", "ni"),
-}
-
-
 class PaginationMixin:  # 分页插件不能单独使用
     query_params = ()
 
@@ -1749,6 +1600,7 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
 
 
 class Key(Schema, ResourceMixin):
+    @property
     def matcher_type(self):
         type_ = self.response["type"]
         if isinstance(type_, str):
@@ -1760,6 +1612,7 @@ class Key(Schema, ResourceMixin):
 
 
 class RefKey(Key):
+    @property
     def matcher_type(self):
         return "object"
 
@@ -1812,6 +1665,7 @@ class PropertiesKey(Key):
     def __init__(self, *properties):
         self.properties = properties
 
+    @property
     def matcher_type(self):
         return "array"
 
@@ -2657,6 +2511,153 @@ class Pagination:
         start = per_page * (page - 1)
         return Pagination(items[start : start + per_page], page, per_page, len(items))
 
+# -------------------过滤器-------------------------------------
+class Condition:  # 属性 过滤器 值
+    def __init__(self, attribute, filter, value):
+        self.attribute = attribute
+        self.filter = filter
+        self.value = value
+
+    def __call__(self, item):
+        return self.filter.op(get_value(self.attribute, item, None), self.value)
+
+
+class BaseFilter(Schema):
+    name = None
+    filters = {}
+
+    def __init__(self, field=None, attribute=None):
+        self._attribute = attribute
+        self._field = field
+
+    @property
+    def field(self):  # 被过滤的字段,只是使用field.convert
+        if self.name in ("eq", "ne"):
+            return self._field
+        if self.name in ("in", "ni"):
+            return List(self._field, min_items=0, unique=True)
+        if self.name == "ha":
+            return self._field.container
+        if self.name == "bt":
+            return List(self._field, min_items=2, max_items=2)
+        if self.name in ("ct", "ci", "sw", "si", "ew", "ei"):
+            return Str(min_length=1)
+        if not isinstance(self._field, (Date, DateTime)):
+            return Float()
+        return self._field
+
+    @property
+    def attribute(self):
+        return self._attribute or self.field.attribute
+
+    def convert(self, instance, **kwargs):
+        if self.name is None:  # 过滤器的转换就是所过滤字段的转换
+            return Condition(self.attribute, self, self.field.convert(instance))
+        return Condition(self.attribute, self, self.field.convert(instance[f"${self.name}"]))
+
+    def schema(self):  # 过滤器只能针对请求模式，过滤器的模式就是所过滤字段的请求模式
+        schema = self.field.request
+        if schema:
+            _schema = {k: v for k, v in schema.items() if k != "readOnly"}
+        else:
+            _schema = schema
+        if self.name is None:
+            return _schema
+        return {
+            "type": "object",
+            "properties": {f"${self.name}": _schema},
+            "required": [f"${self.name}"],
+            "additionalProperties": False,
+        }
+
+    @classmethod
+    def make_filter(cls, name, func):
+        return type(
+            name.upper(),
+            (cls,),
+            {"op": classmethod(lambda s, a, b: func(a, b)), "name": name},
+        )
+
+    @classmethod
+    def register(cls, name, func):  # 类方法返回子类
+        class_ = cls.make_filter(name, func)
+        cls.filters[name] = class_
+
+
+# 属性过滤
+BaseFilter.register("lt", lambda a, b: a < b)
+BaseFilter.register("gt", lambda a, b: a > b)
+BaseFilter.register("eq", lambda a, b: a == b)
+BaseFilter.register("ne", lambda a, b: a != b)
+BaseFilter.register("le", lambda a, b: a <= b)
+BaseFilter.register("ge", lambda a, b: a >= b)
+BaseFilter.register("in", lambda a, b: a in b)
+BaseFilter.register("ni", lambda a, b: a not in b)
+BaseFilter.register("ha", lambda a, b: hasattr(a, "__iter__") and b in a)
+BaseFilter.register("ct", lambda a, b: a and b in a)
+BaseFilter.register("ci", lambda a, b: a and b.lower() in a.lower())
+BaseFilter.register("sw", lambda a, b: a.startswith(b))
+BaseFilter.register("si", lambda a, b: a.lower().startswith(b.lower()))
+BaseFilter.register("ew", lambda a, b: a.endswith(b))
+BaseFilter.register("ei", lambda a, b: a.lower().endswith(b.lower()))
+BaseFilter.register("bt", lambda a, b: b[0] <= a <= b[1])
+
+
+class SQLAlchemyFilter(BaseFilter):
+    filters = {}
+
+    def __init__(self, field=None, attribute=None, column=None):
+        super().__init__(field=field, attribute=attribute)
+        self.column = column
+
+    @classmethod
+    def apply(cls, query, conditions):
+        expressions = [condition.filter.expression(condition.value) for condition in conditions]
+        if len(expressions) == 1:
+            return query.filter(expressions[0])
+        return query.filter(and_(*expressions))
+
+    @classmethod
+    def make_filter(cls, name, func):
+        return type(
+            name.upper(),
+            (cls,),
+            {"expression": lambda self, value: func(self.column, value), "name": name},
+        )
+
+
+SQLAlchemyFilter.register("eq", lambda c, v: c == v)  # 隐式的创建过滤器
+SQLAlchemyFilter.register("ne", lambda c, v: c != v)
+SQLAlchemyFilter.register("lt", lambda c, v: c < v)
+SQLAlchemyFilter.register("le", lambda c, v: c <= v)
+SQLAlchemyFilter.register("gt", lambda c, v: c > v)
+SQLAlchemyFilter.register("ge", lambda c, v: c >= v)
+SQLAlchemyFilter.register("in", lambda c, v: c.in_(v) if len(v) else False)
+SQLAlchemyFilter.register("ni", lambda c, v: c.notin_(v) if len(v) else True)
+SQLAlchemyFilter.register("ha", lambda c, v: c.contains(v))
+SQLAlchemyFilter.register("ct", lambda c, v: c.like("%" + v.replace("%", "\\%") + "%"))
+SQLAlchemyFilter.register("ci", lambda c, v: c.ilike("%" + v.replace("%", "\\%") + "%"))
+SQLAlchemyFilter.register("sw", lambda c, v: c.startswith(v.replace("%", "\\%")))
+SQLAlchemyFilter.register("si", lambda c, v: c.ilike(v.replace("%", "\\%") + "%"))
+SQLAlchemyFilter.register("ew", lambda c, v: c.endswith(v.replace("%", "\\%")))
+SQLAlchemyFilter.register("ei", lambda c, v: c.ilike("%" + v.replace("%", "\\%")))
+SQLAlchemyFilter.register("bt", lambda c, v: c.between(v[0], v[1]))
+
+
+FIELD_FILTERS_DICT = {
+    Bool: ("eq", "ne", "in", "ni"),
+    Date: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
+    DateTime: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
+    Float: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
+    Int: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
+    ItemUri: ("eq", "ne", "in", "ni"),
+    List: ("ha",),
+    Str: ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
+    ToMany: ("ha",),
+    ToOne: ("eq", "ne", "in", "ni"),
+    Uri: ("eq", "ne", "in", "ni"),
+}
+
 
 # 数据管理器，接入数据一端，可以是不同的数据库，只要实现了相同的方法
 class Manager:
@@ -2785,9 +2786,9 @@ class Manager:
             meta.key_converters = [k.bind(resource) for k in meta["key_converters"]]
             meta.key_converters_by_type = {}
             for kc in meta.key_converters:
-                if kc.matcher_type() in meta.key_converters_by_type:
-                    raise RuntimeError(f"Multiple keys of type {kc.matcher_type()} defined for {meta.name}")
-                meta.key_converters_by_type[kc.matcher_type()] = kc
+                if kc.matcher_type in meta.key_converters_by_type:
+                    raise RuntimeError(f"Multiple keys of type {kc.matcher_type} defined for {meta.name}")
+                meta.key_converters_by_type[kc.matcher_type] = kc
 
     def _post_init(self, resource, meta):
         meta.id_attribute = self.id_attribute

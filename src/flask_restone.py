@@ -1640,6 +1640,20 @@ class RefKey(Key):
         return self.resource.manager.read(args["id"])
 
 
+class IDKey(Key):
+    def _on_bind(self, resource):
+        self.id_field = resource.manager.id_field
+
+    def schema(self):
+        return self.id_field.request
+
+    def format(self, item):
+        return self.id_field.output(self.resource.manager.id_attribute, item)
+
+    def convert(self, value, **kwargs):
+        return self.resource.manager.read(self.id_field.convert(value))
+    
+    
 class PropertyKey(Key):
     def __init__(self, property):
         self.property = property
@@ -1688,20 +1702,6 @@ class PropertiesKey(Key):
 
     def convert(self, value, **kwargs):
         return self.resource.manager.first(where={property: value[i] for (i, property) in enumerate(self.properties)})
-
-
-class IDKey(Key):
-    def _on_bind(self, resource):
-        self.id_field = resource.manager.id_field
-
-    def schema(self):
-        return self.id_field.request
-
-    def format(self, item):
-        return self.id_field.output(self.resource.manager.id_attribute, item)
-
-    def convert(self, value, **kwargs):
-        return self.resource.manager.read(self.id_field.convert(value))
 
 
 def _(s):

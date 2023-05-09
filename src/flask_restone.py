@@ -3463,6 +3463,25 @@ class PrincipalMixin:  # 鉴权插件
 
     @cached_property
     def _needs(self):
+        """
+        class Schema:
+            id = UUID()
+            name = Str()
+            age = Int()
+            father = ToOne('self')
+            
+        - {'create':'yes'} --> {'create':{True}}
+        - {'create':'no'} --> {'create':{Permission(("permission-denied",)),}}
+        - {'update':'create'}
+        - {'create':'create'}-->{'create':{_ItemNeed('create',ModelResource)}}
+        - {'create':'user:father'} -->{'create':{_UserNeed('father')}}
+        - {'create':'role:father'} -->{'create':{RoleNeed('father')}}
+        - {'create':'create:father'} -->{'create':{RoleNeed('father')}}
+        - {'create':'admin'} -->{'create':{RoleNeed('admin')}}
+        - {'create':'user:$id'} -->{'create':{_ItemNeed('id',HumanResource)}}
+        :return:
+        :rtype:
+        """
         needs_map = self._raw_needs.copy()
         methods = needs_map.keys()  # 资源的权限只有四个词curd
 
@@ -3500,7 +3519,7 @@ class PrincipalMixin:  # 鉴权插件
                         target = field.target  # 目标
 
                         if role == "user":  # user:attr
-                            options.add(_UserNeed(field))  # 盲猜需要user的field字段为true
+                            options.add(_UserNeed(field))
                         elif role == "role":  # role:xxx
                             options.add(RoleNeed(value))  # 需要用户的角色为xxx
                         else:  # 既不是user又不是role会是啥

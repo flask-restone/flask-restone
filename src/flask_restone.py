@@ -641,24 +641,23 @@ class Date(Field):
         super().__init__(schema, **kwargs)
 
     def formatter(self, value):
-        formatter = {
+        _formatter = {
             "string": lambda value: value.isoformat(),
             "integer": lambda value: int(value.timestamp() / 86400),
             "object": lambda value: {"$date": int(value.timestamp() / 86400)},
         }.get(self.type)
-        return formatter(value)
+        return _formatter(value)
 
     def converter(self, value):
-        converter = {
+        _converter = {
             "string": lambda value: datetime.strptime(value, "%Y-%m-%d").date(),
             "integer": lambda value: date.fromtimestamp(value * 86400),
             "object": lambda value: date.fromtimestamp(value["$date"] * 86400),
         }.get(self.type)
-        return converter(value)
+        return _converter(value)
 
     def faker(self):
-        date = _faker.date_time()
-        return self.formatter(date)
+        return datetime.utcnow()
 
 
 class DateTime(Date):
@@ -674,24 +673,25 @@ class DateTime(Date):
     }
 
     def formatter(self, value):
+        print(value)
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
-        formatter = {
+        _formatter = {
             "string": lambda value: value.isoformat(),
             "integer": lambda value: int(value.timestamp()),
             "number": lambda value: value.timestamp(),
             "object": lambda value: {"$date": int(value.timestamp())},
         }.get(self.type)
-        return formatter(value)
+        return _formatter(value)
 
     def converter(self, value):
-        converter = {
-            "string": lambda value: datetime.fromisoformat(value),
+        _converter = {
+            "string": lambda value: datetime.fromisoformat(value.rstrip("Z")),
             "integer": lambda value: datetime.fromtimestamp(value, timezone.utc),
             "number": lambda value: datetime.fromtimestamp(value, timezone.utc),
             "object": lambda value: datetime.fromtimestamp(value["$date"], timezone.utc),
         }.get(self.type)
-        return converter(value)
+        return _converter(value)
 
 
 def _field_from_object(parent, schema):  # 从对象获取字段

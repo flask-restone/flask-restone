@@ -488,13 +488,6 @@ class Str(Field):
         raise KeyError(f"Key {item} not Support")
 
 
-UUID = Str["%uuid%"] # 需要返回类
-Uri = Str["%uri%"]
-Email = Str["%email%"]
-Ipv4 = Str["%ipv4%"]
-Ipv6 = Str["%ipv6%"]
-
-
 class Int(Field):
     url_rule_converter = "int"
 
@@ -2664,7 +2657,6 @@ FIELD_FILTERS_DICT = {
     Str     : ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
     Many    : ("ha",),
     Ref     : ("eq", "ne", "in", "ni"),
-    Uri     : ("eq", "ne", "in", "ni"),
 }
 
 
@@ -3077,8 +3069,8 @@ class SQLAlchemyManager(RelationManager):
         if isinstance(column.type, postgresql.ARRAY):
             field_class = List
             args = (Str,)
-        elif isinstance(column.type, postgresql.UUID):
-            field_class = UUID
+        # elif isinstance(column.type, postgresql.UUID):
+        #     field_class = UUID
         elif isinstance(column.type, String) and column.type.length:
             field_class = Str
             kwargs = {"max_length": column.type.length}

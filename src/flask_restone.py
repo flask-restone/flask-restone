@@ -1155,11 +1155,6 @@ class Res(Field, ResourceMixin):  # 内联 默认不可更新
         return serializable_schema
 
 
-class Many(List):
-    def __init__(self, resource, **kwargs):
-        super().__init__(Res(resource, nullable=False), **kwargs)
-
-
 class Any(Field):
     def __init__(self, **kwargs):
         super().__init__(

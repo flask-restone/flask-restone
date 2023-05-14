@@ -488,7 +488,7 @@ class Str(Field):
         raise KeyError(f"Key {item} not Support")
 
 
-UUID = Str["%uuid%"]
+UUID = Str["%uuid%"] # 需要返回类
 Uri = Str["%uri%"]
 Email = Str["%email%"]
 Ipv4 = Str["%ipv4%"]
@@ -792,6 +792,8 @@ class List(Field, ResourceMixin):
                 return cls(item[0], item[1], item[1])
         elif isinstance(item, Field):
             return cls(item)
+        elif issubclass(item,Field):
+            return cls(item())
         raise KeyError(f"Key {item} not Support")
 
 
@@ -1037,10 +1039,16 @@ class ResourceRef:
         raise RuntimeError(f'Resource named "{name}" cannot be found; the reference is not bound to an Api.')
 
     def __repr__(self):
-        return f"<ResourceReference '{self.value}'>"
+        return f"<Reference '{self.value}'>"
 
 
 class Ref(Field, ResourceMixin):
+    """表示一个资源对象的引用
+    Ref('books')
+    Ref(BookRes)
+    
+    """
+    
     def __init__(self, resource, **kwargs):  # resource可以是名称
         self.target_reference = ResourceRef(resource)
 
@@ -1153,6 +1161,11 @@ class Res(Field, ResourceMixin):  # 内联 默认不可更新
             v["example"] = faker_data.get(k, "*")
         serializable_schema = json.loads(json.dumps(schema, default=str))
         return serializable_schema
+
+
+class Many(List):
+    def __init__(self, resource, **kwargs):
+        super().__init__(Res(resource, nullable=False), **kwargs)
 
 
 class Any(Field):
@@ -2537,7 +2550,7 @@ class BaseFilter(Schema):
         if self.name == "bt":
             return List(self._field, min_items=2, max_items=2)
         if self.name in ("ct", "ci", "sw", "si", "ew", "ei"):
-            return Str(min_length=1)
+            return Str(1)
         if not isinstance(self._field, (Date, DateTime)):
             return Float()
         return self._field
@@ -2767,7 +2780,7 @@ class Manager:
                 Int,
                 Date,
                 DateTime,
-                Uri,
+                # Uri,
                 ItemUri,
             ),
         )

@@ -742,7 +742,7 @@ def _bind_schema(schema, resource) -> Schema:  # 将格式与资源绑定
 class List(Field, ResourceMixin):
     def __init__(self, schema, min_items=None, max_items=None, unique=None, **kwargs):
         # if True:
-        #     super().__init__(Inline(resource, nullable=False), **kwargs)
+        #     super().__init__(Res(resource, nullable=False), **kwargs)
         
         self.container = container = _field_from_object(self, schema)
         schema_properties = [("type", "array")]
@@ -1040,7 +1040,7 @@ class ResourceRef:
         return f"<ResourceReference '{self.value}'>"
 
 
-class ToOne(Field, ResourceMixin):
+class Ref(Field, ResourceMixin):
     def __init__(self, resource, **kwargs):  # resource可以是名称
         self.target_reference = ResourceRef(resource)
 
@@ -1092,7 +1092,7 @@ class ToOne(Field, ResourceMixin):
                 return self.target.meta.key_converters_by_type[json_type].convert(value)
 
 
-class Inline(Field, ResourceMixin):  # 内联 默认不可更新
+class Res(Field, ResourceMixin):  # 内联 默认不可更新
     """内联对象就是将一个资源完整嵌入
 
     JSON Schema 可以使用 $ref 关键字来表示递归的数据结构。
@@ -1155,9 +1155,9 @@ class Inline(Field, ResourceMixin):  # 内联 默认不可更新
         return serializable_schema
 
 
-class ToMany(List):
+class Many(List):
     def __init__(self, resource, **kwargs):
-        super().__init__(Inline(resource, nullable=False), **kwargs)
+        super().__init__(Res(resource, nullable=False), **kwargs)
 
 
 class Any(Field):
@@ -1443,7 +1443,7 @@ class PaginationMixin:  # 分页插件不能单独使用
         pass
 
 
-class RelationInstances(PaginationMixin, ToMany):
+class RelationInstances(PaginationMixin, Many):
     @cached_property
     def _pagination_types(self):
         return self.container.target.manager.PAGINATION_TYPES
@@ -1811,6 +1811,7 @@ class Route:
             self.request_schema = FieldSet(
                 {name: _field_from_object(self, field) for (name, field) in annotations.items() if name != "return"}
             )  # 请求的语法就是参数名和参数字段类型的字段集，响应也有字段
+            # todo 利用 self 的 annotations 作为本路由的身份验证
             self.response_schema = annotations.get("return", response_schema)
         else:  # 没有标注则要指定参数
             self.request_schema = schema
@@ -1908,7 +1909,7 @@ class Route:
         self.schema = schema
 
     def response_example(self, resource):
-        if isinstance(self.response_schema, (Instances, Inline)):
+        if isinstance(self.response_schema, (Instances, Res)):
             response_schema = _bind_schema(self.response_schema, resource)
             return response_schema.example()
         elif isinstance(self.response_schema, Field):
@@ -2011,7 +2012,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     "GET",
                     relation_instance,
                     rel=camel_case(f"read_{self.attribute}"),
-                    response_schema=Inline(self.target),
+                    response_schema=Res(self.target),
                 )
             if "w" in io or "c" in io:
 
@@ -2024,8 +2025,8 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     "POST",
                     create_relation_instance,
                     rel=camel_case(f"create_{self.attribute}"),
-                    response_schema=ToOne(self.target),
-                    schema=Inline(self.target),
+                    response_schema=Ref(self.target),
+                    schema=Res(self.target),
                 )
             if "w" in io or "u" in io:
 
@@ -2038,8 +2039,8 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     "PUT",
                     update_relation_instance,
                     rel=camel_case(f"update_{self.attribute}"),
-                    response_schema=ToOne(self.target),
-                    schema=Inline(self.target, patchable=True),
+                    response_schema=Ref(self.target),
+                    schema=Res(self.target, patchable=True),
                 )
 
                 def delete_relation_instance(resource, item):  # 删除单个item并移除关系
@@ -2087,8 +2088,8 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     "POST",
                     relation_add,
                     rel=camel_case(f"add_{self.attribute}"),
-                    response_schema=ToOne(self.target),
-                    schema=ToOne(self.target),
+                    response_schema=Ref(self.target),
+                    schema=Res(self.target),
                 )
 
                 def relation_remove(resource, item, target_id):
@@ -2308,7 +2309,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
 
         for k, v in properties.items():
             field = self.schema.fields[k]
-            if isinstance(field, Inline):
+            if isinstance(field, Res):
                 inst = field.target.manager.create(v, commit=False)  # 使用目标字段的create方法，这样即使还有内联也可以直接创建
                 props[f"{k}_id"] = inst.id
                 inlines.append(field.target.manager)
@@ -2321,14 +2322,14 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
 
         return item
 
-    create.request_schema = create.response_schema = Inline("self")
+    create.request_schema = create.response_schema = Res("self")
 
     @Route.GET(lambda r: f"/<{r.meta.id_converter}:id>", rel="self", attribute="instance")
     def read(self, id):
         return self.manager.read(id)
 
     read.request_schema = None
-    read.response_schema = Inline("self")
+    read.response_schema = Res("self")
 
     @read.PUT(rel="update")
     def update(self, properties, id):
@@ -2336,7 +2337,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         updated_item = self.manager.update(item, properties)
         return updated_item
 
-    update.request_schema = Inline("self", patchable=True)
+    update.request_schema = Res("self", patchable=True)
     update.response_schema = update.request_schema
 
     @update.DELETE(rel="destroy")
@@ -2645,17 +2646,17 @@ SQLAlchemyFilter.register("bt", lambda c, v: c.between(v[0], v[1]))
 
 
 FIELD_FILTERS_DICT = {
-    Bool: ("eq", "ne", "in", "ni"),
-    Date: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
+    Bool    : ("eq", "ne", "in", "ni"),
+    Date    : ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
     DateTime: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
-    Float: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
-    Int: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
-    ItemUri: ("eq", "ne", "in", "ni"),
-    List: ("ha",),
-    Str: ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
-    ToMany: ("ha",),
-    ToOne: ("eq", "ne", "in", "ni"),
-    Uri: ("eq", "ne", "in", "ni"),
+    Float   : ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
+    Int     : ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
+    ItemUri : ("eq", "ne", "in", "ni"),
+    List    : ("ha",),
+    Str     : ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
+    Many    : ("ha",),
+    Ref     : ("eq", "ne", "in", "ni"),
+    Uri     : ("eq", "ne", "in", "ni"),
 }
 
 
@@ -3110,7 +3111,7 @@ class SQLAlchemyManager(RelationManager):
     def _is_sortable_field(self, field):
         if super()._is_sortable_field(field):
             return True
-        if isinstance(field, ToOne):
+        if isinstance(field, Ref):
             return isinstance(field.target.manager, SQLAlchemyManager)
         return False
 
@@ -3169,7 +3170,7 @@ class SQLAlchemyManager(RelationManager):
         for field, attribute, reverse in sort:
             column = getattr(self.model, attribute)
 
-            if isinstance(field, ToOne):
+            if isinstance(field, Ref):
                 target_alias = aliased(field.target.meta.model)
                 query = query.outerjoin(target_alias, column).reset_joinpoint()
                 sort_attribute = None
@@ -3454,6 +3455,7 @@ class _Permission(Permission):
         return False
 
 
+
 class PrincipalMixin:  # 鉴权插件
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -3468,7 +3470,7 @@ class PrincipalMixin:  # 鉴权插件
             id = UUID()
             name = Str()
             age = Int()
-            father = ToOne('self')
+            father = Ref('self')
             
         - {'create':'yes'} --> {'create':{True}}
         - {'create':'no'} --> {'create':{Permission(("permission-denied",)),}}
@@ -3514,8 +3516,8 @@ class PrincipalMixin:  # 鉴权插件
                     if field.attribute is None:
                         field.attribute = value
                     # {"creat":"role:user"}
-                    # TODO implement this for ToMany as well as ToOne
-                    if isinstance(field, ToOne):  # 一对一的
+                    # TODO implement this for Many as well as Ref
+                    if isinstance(field, Ref):  # 一对一的
                         target = field.target  # 目标
 
                         if role == "user":  # user:attr

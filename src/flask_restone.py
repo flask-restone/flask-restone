@@ -16,7 +16,7 @@ import exrex
 from blinker import Namespace
 from faker import Faker
 from flasgger import swag_from
-from flask import current_app, g, json, jsonify, make_response, request
+from flask import current_app, g, json, jsonify, make_response, request, url_for
 from flask.globals import app_ctx, request_ctx
 from flask_principal import ItemNeed, Permission, RoleNeed, UserNeed
 from flask_sqlalchemy import Pagination as SAPagination
@@ -2147,6 +2147,76 @@ class AttrRoute(RouteSet):  # 单个记录的属性路由
             )
 
 
+class TaskRoute(RouteSet):
+
+    def __init__(self, func, backend, bind=True,attribute=None):
+        self.long_task = backend.task(func, bind=bind)
+        annotations = func.__annotations__
+
+        self.schema = FieldSet({name: _field_from_object(self, field) for (name, field) in annotations.items() if name != "return"} )
+        
+        self.attribute = attribute
+        
+    def routes(self):
+        rule = f"/{_(self.attribute)}"
+        
+        task_status_route = ItemRoute(rule=f"{rule}/<string:task_id>")
+        task_action_route = ItemRoute(rule=rule)
+        
+        def longtask(resource,item,**kwargs):
+            # kwargs = {'total': random.randint(10, 50), 'message': ''}
+            
+            task = self.long_task.apply_async(kwargs=kwargs)
+            
+            return '', 202, {'Location': url_for(f'{resource.meta.name}_taskstatus',id=item.id, task_id=task.id)}
+        
+        yield task_action_route.for_method(
+            "POST",
+            longtask,
+            rel=f"startTask",
+            schema = self.schema,
+            description="start task",
+        )
+        
+        def taskstatus(resource,item,task_id):
+            task = self.long_task.AsyncResult(task_id)
+            if task.state == 'PENDING':
+                response = {
+                    'state'    : task.state,
+                    'current'  : 0,
+                    'total'    : 1,
+                    'status'   : 'Pending...',
+                    'remaining': ''
+                }
+            elif task.state != 'FAILURE':
+                response = {
+                    'state'    : task.state,
+                    'current'  : task.info.get('current', 0),
+                    'total'    : task.info.get('total', 1),
+                    'status'   : task.info.get('status', ''),
+                    'remaining': task.info.get('remaining', '')
+                }
+                if 'result' in task.info:
+                    response['result'] = task.info['result']
+            else:
+                # something went wrong in the background job
+                response = {
+                    'state'    : task.state,
+                    'current'  : 1,
+                    'total'    : 1,
+                    'status'   : str(task.info),  # this is the exception raised
+                    'remaining': ''
+                }
+            return jsonify(response)
+        
+        yield task_status_route.for_method(
+            "GET",
+            taskstatus,
+            rel=f"taskstatus",
+            description="start task",
+        )
+
+
 class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
@@ -3702,7 +3772,17 @@ def schema_to_swag_dict(route, resource):
             "description": f"the ID of the {resource.meta.name}",
         }
         flasgger_dict["parameters"].append(parameter)
-
+        
+    for i in re.findall('\{(.+?)\}',href):
+        parameter = {
+            "in": "path",
+            "name": i,
+            "type": "string",
+            "required": True,
+            "description": f"the ID of the {resource.meta.name}",
+        }
+        flasgger_dict["parameters"].append(parameter)
+        
     if method == "GET":
         required_props = _schema.get("required", [])
         for prop, details in _schema.get("properties", {}).items():

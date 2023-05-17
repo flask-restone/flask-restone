@@ -1298,7 +1298,7 @@ class Optional(Field):
         return schema
 
 
-class ItemUri(Field):
+class ResUri(Field):
     def __init__(self, resource, attribute=None):
         self.target_reference = ResourceRef(resource)
         super().__init__(
@@ -1713,7 +1713,7 @@ class Instances(PaginationMixin, Schema, ResourceMixin):
         return sort, where
 
 
-class Key(Schema, ResourceMixin):
+class _Key(Schema, ResourceMixin):
     @property
     def matcher_type(self):
         type_ = self.response["type"]
@@ -1725,7 +1725,7 @@ class Key(Schema, ResourceMixin):
         return self.__class__().bind(resource=resource)
 
 
-class RefKey(Key):
+class _RefKey(_Key):
     @property
     def matcher_type(self):
         return "object"
@@ -1754,7 +1754,7 @@ class RefKey(Key):
         return self.resource.manager.read(args["id"])
 
 
-class IDKey(Key):
+class _IDKey(_Key):
     def _on_bind(self, resource):
         self.id_field = resource.manager.id_field
 
@@ -1768,7 +1768,7 @@ class IDKey(Key):
         return self.resource.manager.read(self.id_field.convert(value))
 
 
-class PropertyKey(Key):
+class _NaturalKey(_Key):
     def __init__(self, property):
         self.property = property
 
@@ -1791,7 +1791,7 @@ class PropertyKey(Key):
         return self.resource.manager.first(where={self.property: value})
 
 
-class PropertiesKey(Key):
+class _MultiNaturalKey(_Key):
     def __init__(self, *properties):
         self.properties = properties
 
@@ -2767,7 +2767,7 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
             "copy",
             "test",
         )
-        key_converters = (RefKey(), IDKey())
+        key_converters = (_RefKey(), _IDKey())
         datetime_formatter = DateTime
         natural_key = None
 
@@ -2953,16 +2953,16 @@ SQLAlchemyFilter.register("bt", lambda c, v: c.between(v[0], v[1]))
 
 
 FIELD_FILTERS_DICT = {
-    Bool: ("eq", "ne", "in", "ni"),
-    Date: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
+    Bool    : ("eq", "ne", "in", "ni"),
+    Date    : ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
     DateTime: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
-    Float: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
-    Int: ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
-    ItemUri: ("eq", "ne", "in", "ni"),
-    List: ("ha",),
-    Str: ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
-    Many: ("ha",),
-    Ref: ("eq", "ne", "in", "ni"),
+    Float   : ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
+    Int     : ("eq", "ne", "lt", "le", "gt", "ge", "in", "ni"),
+    ResUri  : ("eq", "ne", "in", "ni"),
+    List    : ("ha",),
+    Str     : ("eq", "ne", "ct", "ci", "sw", "si", "ew", "ei", "in", "ni"),
+    Many    : ("ha",),
+    Ref     : ("eq", "ne", "in", "ni"),
 }
 
 
@@ -2992,7 +2992,7 @@ class Manager:
         if meta.include_id:
             field_set.set("$id", self.id_field)
         else:
-            field_set.set("$uri", ItemUri(resource, attribute=id_attribute))
+            field_set.set("$uri", ResUri(resource, attribute=id_attribute))
 
     def _init_filter(self, filter_class, name, field, attribute):
         return filter_class(field=field, attribute=field.attribute or attribute)
@@ -3087,16 +3087,16 @@ class Manager:
                 Date,
                 DateTime,
                 # Uri,
-                ItemUri,
+                ResUri,
             ),
         )
 
     def _init_key_converters(self, resource, meta):
         if "natural_key" in meta:
             if isinstance(meta.natural_key, str):
-                meta["key_converters"] += (PropertyKey(meta.natural_key),)
+                meta["key_converters"] += (_NaturalKey(meta.natural_key),)
             elif isinstance(meta.natural_key, (list, tuple)):
-                meta["key_converters"] += (PropertiesKey(*meta.natural_key),)
+                meta["key_converters"] += (_MultiNaturalKey(*meta.natural_key),)
         if "key_converters" in meta:
             meta.key_converters = [
                 k.bind(resource) for k in meta["key_converters"]
@@ -3358,7 +3358,7 @@ class SQLAlchemyManager(RelationManager):
         if meta.include_id:
             fs.set("$id", self.id_field)
         else:
-            fs.set("$uri", ItemUri(resource, attribute=self.id_attribute))
+            fs.set("$uri", ResUri(resource, attribute=self.id_attribute))
 
         # resource name: use model table's name if not set explicitly
         if not hasattr(resource.Meta, "name"):

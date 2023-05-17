@@ -21,7 +21,7 @@ flask_restone 是一个基于 Flask 的 RESTful API 框架，提供了以下特�
 - ToOne：一对一关系
 - ToMany：一对多关系
 - Inline：内联对象
-- InlineModel：内联模型
+- ModelDict：内联模型
 - Instances：实例类型
 ### Types:
 

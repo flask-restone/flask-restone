@@ -1298,21 +1298,6 @@ class Optional(Field):
         return schema
 
 
-class ItemType(Field):
-    def __init__(self, resource):
-        self.resource = resource
-        super().__init__(
-            lambda: {"type": "string", "enum": [self.resource.meta.name]},
-            io="r",
-        )
-
-    def format(self, value):
-        return self.resource.meta.name
-
-    def faker(self):
-        return self.resource.meta.name
-
-
 class ItemUri(Field):
     def __init__(self, resource, attribute=None):
         self.target_reference = ResourceRef(resource)
@@ -2763,7 +2748,6 @@ class ModelResource(Resource, metaclass=ModelResourceMeta):
         id_converter = None  # string
         id_field_class = Int  # id域的类
         include_id = False  # 包括id
-        include_type = False  # 包括类型
         manager = None  # 数据库管理
         include_fields = None  # 包括
         exclude_fields = None  # 不包括
@@ -3009,8 +2993,6 @@ class Manager:
             field_set.set("$id", self.id_field)
         else:
             field_set.set("$uri", ItemUri(resource, attribute=id_attribute))
-        if meta.include_type:
-            field_set.set("$type", ItemType(resource))
 
     def _init_filter(self, filter_class, name, field, attribute):
         return filter_class(field=field, attribute=field.attribute or attribute)
@@ -3377,9 +3359,6 @@ class SQLAlchemyManager(RelationManager):
             fs.set("$id", self.id_field)
         else:
             fs.set("$uri", ItemUri(resource, attribute=self.id_attribute))
-
-        if meta.include_type:
-            fs.set("$type", ItemType(resource))
 
         # resource name: use model table's name if not set explicitly
         if not hasattr(resource.Meta, "name"):

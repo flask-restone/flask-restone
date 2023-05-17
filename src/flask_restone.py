@@ -1444,12 +1444,6 @@ class PaginationMixin:  # 分页插件不能单独使用
         pass
 
 
-class RelationInstances(PaginationMixin, Many):
-    @cached_property
-    def _pagination_types(self):
-        return self.container.target.manager.PAGINATION_TYPES
-
-
 class Instances(PaginationMixin, Schema, ResourceMixin):
     query_params = ("where", "sort")
 
@@ -2070,17 +2064,18 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     "GET",
                     relation_instances,
                     rel=self.attribute,
-                    response_schema=RelationInstances(self.target),
+                    response_schema=Many(self.target),
                     schema=FieldSet(
                         {
-                            PAGE: Int(minimum=1, default=1),
-                            PER_PAGE: Int(minimum=1, default=20, maximum=50),
+                            PAGE: Int(minimum=1,nullable=True),
+                            PER_PAGE: Int(minimum=1,nullable=True),
                         }
                     ),
                 )
             if "w" in io or "u" in io:
 
                 def relation_add(resource, item, target_item):
+                    target_item = self.target.manager.create(target_item) ## 此处是增加
                     resource.manager.relation_add(item, self.attribute, self.target, target_item)
                     resource.manager.commit()
                     return target_item
@@ -2089,7 +2084,7 @@ class Relation(RouteSet, ResourceMixin):  # 关系型也是RouteSet子类
                     "POST",
                     relation_add,
                     rel=camel_case(f"add_{self.attribute}"),
-                    response_schema=Ref(self.target),
+                    response_schema=Res(self.target),
                     schema=Res(self.target),
                 )
 

@@ -246,7 +246,7 @@ class Schema(ABC):
         return self.convert(data, update=request.method in ("PUT", "PATCH"))
 
     def format_response(self, response):  # 解包响应并格式化json-data
-        data, code, headers = unpack(response)
+        data, code, headers = _unpack(response)
         return self.format(data), code, headers
 
 
@@ -381,7 +381,7 @@ class Field(Schema):
 
     def output(self, key, obj):
         key = self.attribute or key
-        return self.format(get_value(key, obj, self.default))
+        return self.format(_getattr(obj, key, self.default))
 
     def faker(self):
         """假数据生成，用于测试"""
@@ -702,7 +702,7 @@ def _field_from_object(parent, schema):  # 从对象获取字段
     return container
 
 
-class _ResourceMixin:
+class _BindMixin:
     """
     资源绑定插件
     """
@@ -726,13 +726,13 @@ class _ResourceMixin:
         )
 
 
-def _bind_schema(schema, resource) -> Schema:  # 将格式与资源绑定
-    if isinstance(schema, _ResourceMixin):
+def _bind(schema, resource) -> Schema:  # 将格式与资源绑定
+    if isinstance(schema, _BindMixin):
         return schema.bind(resource)
     return schema
 
 
-class List(Field, _ResourceMixin):
+class List(Field, _BindMixin):
     def __init__(self, schema, min_items=None, max_items=None, unique=None, **kwargs):
         self.container = container = _field_from_object(self, schema)
         schema_properties = [("type", "array")]
@@ -753,7 +753,7 @@ class List(Field, _ResourceMixin):
         )
 
     def bind(self, resource):
-        if isinstance(self.container, _ResourceMixin):
+        if isinstance(self.container, _BindMixin):
             self.container = self.container.bind(resource)
         return self
 
@@ -806,7 +806,7 @@ class Tuple(Field):
         super().__init__(schema, **kwargs)
 
 
-class Dict(Field, _ResourceMixin):
+class Dict(Field, _BindMixin):
     """
     在 JSON Schema 中，'patternProperties'是一个关键字，用于描述对象属性的模式。
     它是一个用于限制 JSON 数据中对象属性模式的关键字，可以用来描述对象中所有匹配某个
@@ -912,11 +912,11 @@ class Dict(Field, _ResourceMixin):
     def bind(self, resource):
         # 满足某个模式的字段都用一个字段类，比如 {{".*_time":DateTime}}
         if self.properties:
-            self.properties = {key: _bind_schema(value, resource) for (key, value) in self.properties.items()}
+            self.properties = {key: _bind(value, resource) for (key, value) in self.properties.items()}
         if self.pattern_props:
-            self.pattern_props = {key: _bind_schema(value, resource) for (key, value) in self.pattern_props.items()}
+            self.pattern_props = {key: _bind(value, resource) for (key, value) in self.pattern_props.items()}
         if self.other_props:
-            self.other_props = _bind_schema(self.other_props, resource)
+            self.other_props = _bind(self.other_props, resource)
         return self
 
     @cached_property
@@ -928,7 +928,7 @@ class Dict(Field, _ResourceMixin):
     def formatter(self, value):
         output = {}
         if self.properties:
-            output = {k: f.format(get_value(f.attribute or k, value, f.default)) for (k, f) in self.properties.items()}
+            output = {k: f.format(_getattr(value, f.attribute or k, f.default)) for (k, f) in self.properties.items()}
         if self.pattern_props:  # 只能二选一，初始化的时候就抛出异常了，下面的异常不可达，删掉省一个判断
             field = next(iter(self.pattern_props.values()))
             output.update({k: field.format(v) for (k, v) in value.items() if k not in self._property_attributes})
@@ -1032,11 +1032,8 @@ class ResourceRef:
             raise RuntimeError(f'Resource named "{name}" is not registered with the Api it is bound to.')
         raise RuntimeError(f'Resource named "{name}" cannot be found; the reference is not bound to an Api.')
 
-    def __repr__(self):
-        return f"<Reference '{self.value}'>"
 
-
-class Ref(Field, _ResourceMixin):
+class Ref(Field, _BindMixin):
     """表示一个资源对象的引用
     Ref('books')
     Ref(BookRes)
@@ -1094,7 +1091,7 @@ class Ref(Field, _ResourceMixin):
                 return self.target.meta.key_converters_by_type[json_type].convert(value)
 
 
-class Res(Field, _ResourceMixin):  # 内联 默认不可更新
+class Res(Field, _BindMixin):  # 内联 默认不可更新
     """内联对象就是将一个资源完整嵌入
 
     JSON Schema 可以使用 $ref 关键字来表示递归的数据结构。
@@ -1223,7 +1220,7 @@ class ResUri(Field):
         return f"{self.target.route_prefix}/{value}"
 
     def converter(self, value):
-        _, args = route_from(value, "GET")
+        _, args = _route_from(value, "GET")
         return self.target.manager.id_field.convert(args["id"])
 
     def faker(self):
@@ -1238,7 +1235,7 @@ class _DummySchema(Schema):  # 简化格式实现
         return self._schema
 
        
-class FieldSet(Schema, _ResourceMixin):
+class FieldSet(Schema, _BindMixin):
     """
     字段集:
         用于描述资源所有的字段
@@ -1253,7 +1250,7 @@ class FieldSet(Schema, _ResourceMixin):
 
     def _on_bind(self, resource):  # 字段字典内部字段能绑则绑
         self.fields = {
-            key: field.bind(resource) if isinstance(field, _ResourceMixin) else field
+            key: field.bind(resource) if isinstance(field, _BindMixin) else field
             for (key, field) in self.fields.items()
         }
 
@@ -1261,7 +1258,7 @@ class FieldSet(Schema, _ResourceMixin):
         return FieldSet(dict(self.fields), tuple(self.required)).bind(resource)
 
     def set(self, key, field):  # 设置字段并绑定资源
-        if self.resource and isinstance(field, _ResourceMixin):
+        if self.resource and isinstance(field, _BindMixin):
             field = field.bind(self.resource)
         self.fields[key] = field
 
@@ -1421,7 +1418,7 @@ class _PaginationMixin:  # 分页插件不能单独使用
         pass
 
 
-class Instances(_PaginationMixin, Schema, _ResourceMixin):
+class Instances(_PaginationMixin, Schema, _BindMixin):
     query_params = ("where", "sort")
 
     def __init__(self, required_fields=None, item_decorator=None):  # 2.23 新增可选展示的字段
@@ -1434,7 +1431,7 @@ class Instances(_PaginationMixin, Schema, _ResourceMixin):
 
     @cached_property
     def _pagination_types(self):
-        return self.resource.manager.PAGINATION_TYPES
+        return self.resource.manager.pagination_classes
 
     @staticmethod
     def _field_filters_schema(filters):
@@ -1576,7 +1573,7 @@ class Instances(_PaginationMixin, Schema, _ResourceMixin):
         return sort, where
 
 
-class _Key(Schema, _ResourceMixin):
+class _Key(Schema, _BindMixin):
     @property
     def matcher_type(self):
         type_ = self.response["type"]
@@ -1607,13 +1604,13 @@ class RefKey(_Key):
 
     @staticmethod
     def _item_uri(resource, item):
-        return f"{resource.route_prefix}/{get_value(resource.manager.id_attribute, item, None)}"
+        return f"{resource.route_prefix}/{_getattr(item, resource.manager.id_attribute, None)}"
 
     def format(self, item):
         return {"$ref": self._item_uri(self.resource, item)}
 
     def convert(self, value, **kwargs):
-        _, args = route_from(value["$ref"], "GET")
+        _, args = _route_from(value["$ref"], "GET")
         return self.resource.manager.read(args["id"])
 
 
@@ -1685,11 +1682,11 @@ def _(s):
     return s.replace("_", "-")
 
 
-def camel_case(s):
+def _camel_case(s):
     return s[0].lower() + s.title().replace("_", "")[1:] if s else s
 
 
-def route_from(url, method=None):
+def _route_from(url, method=None):
     if app_ctx is None:
         raise RuntimeError(
             "Attempted to match a URL without the application context being pushed. This has to be executed when application context is available."
@@ -1708,7 +1705,7 @@ def route_from(url, method=None):
     return url_adapter.match(parsed_url.path, method)
 
 
-def unpack(value):
+def _unpack(value):
     if not isinstance(value, tuple):
         return value, 200, {}
     if len(value) == 2:
@@ -1716,7 +1713,7 @@ def unpack(value):
     return value
 
 
-def get_value(key, obj, default=None):
+def _getattr(obj, key, default=None):
     if hasattr(obj, "__getitem__"):
         try:
             return obj[key]
@@ -1774,8 +1771,8 @@ class Route:
         self.rel = rel  # 关系
         self.rule = rule  # 规则
         self.method = method  # get/post
-        self.attribute = attribute  # 属性？
-        self.title = title  # 标题？网页标题
+        self.attribute = attribute  # 属性
+        self.title = title  # 标题
         if not description and view_func.__doc__:  # 从docstring中获取description
             description = view_func.__doc__.splitlines()[0].strip()
         self.description = description
@@ -1805,11 +1802,11 @@ class Route:
             return self.rel  # 关联字符串 read_status?
 
         verb = HTTP_VERBS.get(self.method, self.method.lower())
-        return camel_case(f"{verb}_{self.attribute}")
+        return _camel_case(f"{verb}_{self.attribute}")
 
     def schema_factory(self, resource):  # 规则工厂 将路由的请求与响应规则绑定到资源上
-        request_schema = _bind_schema(self.request_schema, resource)
-        response_schema = _bind_schema(self.response_schema, resource)
+        request_schema = _bind(self.request_schema, resource)
+        response_schema = _bind(self.response_schema, resource)
         schema = OrderedDict(
             [
                 ("rel", self.relation),
@@ -1887,7 +1884,7 @@ class Route:
 
     def response_example(self, resource):
         if isinstance(self.response_schema, (Instances, Res)):
-            response_schema = _bind_schema(self.response_schema, resource)
+            response_schema = _bind(self.response_schema, resource)
             return response_schema.example()
         elif isinstance(self.response_schema, Field):
             response_schema = self.response_schema.response
@@ -1909,8 +1906,8 @@ class Route:
         return "".join((resource.route_prefix, rule))
 
     def view_factory(self, name, resource):  # 视图工厂
-        request_schema = _bind_schema(self.request_schema, resource)
-        response_schema = _bind_schema(self.response_schema, resource)
+        request_schema = _bind(self.request_schema, resource)
+        response_schema = _bind(self.response_schema, resource)
         view_func = self.view_func
 
         def view(*args, **kwargs):
@@ -1933,6 +1930,7 @@ class Route:
         locals()[method.lower()] = locals()[method]
     # 使用locals 在当前作用域来设置批量类方法
     
+
 class ItemRoute(Route):  # 单个记录
     def rule_factory(self, resource, relative=False):
         rule = self.rule
@@ -1962,7 +1960,7 @@ class RouteSet(ABC):
         pass
 
 
-class Relation(RouteSet, _ResourceMixin):  # 关系型也是RouteSet子类
+class Relation(RouteSet, _BindMixin):  # 关系型也是RouteSet子类
     def __init__(self, resource, uselist=True, io="rw", attribute=None):
         self.reference = ResourceRef(resource)  # 找到关联的资源类
         self.attribute = attribute  # 属性名
@@ -1987,7 +1985,7 @@ class Relation(RouteSet, _ResourceMixin):  # 关系型也是RouteSet子类
                 yield relations_route.for_method(
                     "GET",
                     relation_instance,
-                    rel=camel_case(f"read_{self.attribute}"),
+                    rel=_camel_case(f"read_{self.attribute}"),
                     response_schema=Res(self.target),
                 )
             if "w" in io or "c" in io:
@@ -2000,7 +1998,7 @@ class Relation(RouteSet, _ResourceMixin):  # 关系型也是RouteSet子类
                 yield relations_route.for_method(
                     "POST",
                     create_relation_instance,
-                    rel=camel_case(f"create_{self.attribute}"),
+                    rel=_camel_case(f"create_{self.attribute}"),
                     response_schema=Ref(self.target),
                     schema=Res(self.target),
                 )
@@ -2014,7 +2012,7 @@ class Relation(RouteSet, _ResourceMixin):  # 关系型也是RouteSet子类
                 yield relations_route.for_method(
                     "PUT",
                     update_relation_instance,
-                    rel=camel_case(f"update_{self.attribute}"),
+                    rel=_camel_case(f"update_{self.attribute}"),
                     response_schema=Ref(self.target),
                     schema=Res(self.target, patchable=True),
                 )
@@ -2029,7 +2027,7 @@ class Relation(RouteSet, _ResourceMixin):  # 关系型也是RouteSet子类
                 yield relations_route.for_method(
                     "DELETE",
                     delete_relation_instance,
-                    rel=camel_case(f"remove_{self.attribute}"),
+                    rel=_camel_case(f"remove_{self.attribute}"),
                 )
         else:
             if "r" in io:
@@ -2068,7 +2066,7 @@ class Relation(RouteSet, _ResourceMixin):  # 关系型也是RouteSet子类
                 yield relations_route.for_method(
                     "POST",
                     relation_add,
-                    rel=camel_case(f"add_{self.attribute}"),
+                    rel=_camel_case(f"add_{self.attribute}"),
                     response_schema=Res(self.target),
                     schema=Res(self.target),
                 )
@@ -2082,7 +2080,7 @@ class Relation(RouteSet, _ResourceMixin):  # 关系型也是RouteSet子类
                 yield relation_route.for_method(
                     "DELETE",
                     relation_remove,
-                    rel=camel_case(f"remove_{self.attribute}"),
+                    rel=_camel_case(f"remove_{self.attribute}"),
                 )
 
 
@@ -2102,27 +2100,27 @@ class AttrRoute(RouteSet):  # 单个记录的属性路由
         if "r" in io:  # 读属性的路由
 
             def read_attribute(resource, item):  # noqa
-                return get_value(attribute, item, field.default)
+                return _getattr(item, attribute, field.default)
 
             yield route.for_method(
                 "GET",
                 read_attribute,
                 response_schema=field,
-                rel=camel_case(f"read_{route.attribute}"),
+                rel=_camel_case(f"read_{route.attribute}"),
                 description=self.description,
             )
         if "u" in io:  # 更新属性的路由
 
             def update_attribute(resource, item, value):  # 直接post一个string即可
                 item = resource.manager.update(item, {attribute: value})
-                return get_value(attribute, item, field.default)
+                return _getattr(item, attribute, field.default)
 
             yield route.for_method(
                 "POST",
                 update_attribute,
                 schema=field,
                 response_schema=field,
-                rel=camel_case(f"update_{route.attribute}"),
+                rel=_camel_case(f"update_{route.attribute}"),
                 description=self.description,
             )
 
@@ -2286,7 +2284,7 @@ class _ResourceMeta(type):
         for n, m in members.items():
             if isinstance(m, Route):
                 add_route(routes, m, n)
-            if isinstance(m, _ResourceMixin):
+            if isinstance(m, _BindMixin):
                 m.bind(class_)
 
         if meta.exclude_routes:
@@ -2598,17 +2596,17 @@ class Pagination:
 
 
 # -------------------过滤器-------------------------------------
-class Condition:  # 属性 过滤器 值
+class _Condition:  # 属性 过滤器 值
     def __init__(self, attribute, filter, value):
         self.attribute = attribute
         self.filter = filter
         self.value = value
 
     def __call__(self, item):
-        return self.filter.op(get_value(self.attribute, item, None), self.value)
+        return self.filter.op(_getattr(item, self.attribute, None), self.value)
 
 
-class BaseFilter(Schema):
+class _BaseFilter(Schema):
     name = None
     filters = {}
 
@@ -2638,8 +2636,8 @@ class BaseFilter(Schema):
 
     def convert(self, instance, **kwargs):
         if self.name is None:  # 过滤器的转换就是所过滤字段的转换
-            return Condition(self.attribute, self, self.field.convert(instance))
-        return Condition(self.attribute, self, self.field.convert(instance[f"${self.name}"]))
+            return _Condition(self.attribute, self, self.field.convert(instance))
+        return _Condition(self.attribute, self, self.field.convert(instance[f"${self.name}"]))
 
     def schema(self):  # 过滤器只能针对请求模式，过滤器的模式就是所过滤字段的请求模式
         schema = self.field.request
@@ -2671,25 +2669,25 @@ class BaseFilter(Schema):
 
 
 # 属性过滤
-BaseFilter.register("lt", lambda a, b: a < b)
-BaseFilter.register("gt", lambda a, b: a > b)
-BaseFilter.register("eq", lambda a, b: a == b)
-BaseFilter.register("ne", lambda a, b: a != b)
-BaseFilter.register("le", lambda a, b: a <= b)
-BaseFilter.register("ge", lambda a, b: a >= b)
-BaseFilter.register("in", lambda a, b: a in b)
-BaseFilter.register("ni", lambda a, b: a not in b)
-BaseFilter.register("ha", lambda a, b: hasattr(a, "__iter__") and b in a)
-BaseFilter.register("ct", lambda a, b: a and b in a)
-BaseFilter.register("ci", lambda a, b: a and b.lower() in a.lower())
-BaseFilter.register("sw", lambda a, b: a.startswith(b))
-BaseFilter.register("si", lambda a, b: a.lower().startswith(b.lower()))
-BaseFilter.register("ew", lambda a, b: a.endswith(b))
-BaseFilter.register("ei", lambda a, b: a.lower().endswith(b.lower()))
-BaseFilter.register("bt", lambda a, b: b[0] <= a <= b[1])
+_BaseFilter.register("lt", lambda a, b: a < b)
+_BaseFilter.register("gt", lambda a, b: a > b)
+_BaseFilter.register("eq", lambda a, b: a == b)
+_BaseFilter.register("ne", lambda a, b: a != b)
+_BaseFilter.register("le", lambda a, b: a <= b)
+_BaseFilter.register("ge", lambda a, b: a >= b)
+_BaseFilter.register("in", lambda a, b: a in b)
+_BaseFilter.register("ni", lambda a, b: a not in b)
+_BaseFilter.register("ha", lambda a, b: hasattr(a, "__iter__") and b in a)
+_BaseFilter.register("ct", lambda a, b: a and b in a)
+_BaseFilter.register("ci", lambda a, b: a and b.lower() in a.lower())
+_BaseFilter.register("sw", lambda a, b: a.startswith(b))
+_BaseFilter.register("si", lambda a, b: a.lower().startswith(b.lower()))
+_BaseFilter.register("ew", lambda a, b: a.endswith(b))
+_BaseFilter.register("ei", lambda a, b: a.lower().endswith(b.lower()))
+_BaseFilter.register("bt", lambda a, b: b[0] <= a <= b[1])
 
 
-class SQLAlchemyFilter(BaseFilter):
+class _SQLAlchemyFilter(_BaseFilter):
     filters = {}
 
     def __init__(self, field=None, attribute=None, column=None):
@@ -2715,25 +2713,25 @@ class SQLAlchemyFilter(BaseFilter):
         )
 
 
-SQLAlchemyFilter.register("eq", lambda c, v: c == v)  # 隐式的创建过滤器
-SQLAlchemyFilter.register("ne", lambda c, v: c != v)
-SQLAlchemyFilter.register("lt", lambda c, v: c < v)
-SQLAlchemyFilter.register("le", lambda c, v: c <= v)
-SQLAlchemyFilter.register("gt", lambda c, v: c > v)
-SQLAlchemyFilter.register("ge", lambda c, v: c >= v)
-SQLAlchemyFilter.register("in", lambda c, v: c.in_(v) if len(v) else False)
-SQLAlchemyFilter.register("ni", lambda c, v: c.notin_(v) if len(v) else True)
-SQLAlchemyFilter.register("ha", lambda c, v: c.contains(v))
-SQLAlchemyFilter.register("ct", lambda c, v: c.like("%" + v.replace("%", "\\%") + "%"))
-SQLAlchemyFilter.register("ci", lambda c, v: c.ilike("%" + v.replace("%", "\\%") + "%"))
-SQLAlchemyFilter.register("sw", lambda c, v: c.startswith(v.replace("%", "\\%")))
-SQLAlchemyFilter.register("si", lambda c, v: c.ilike(v.replace("%", "\\%") + "%"))
-SQLAlchemyFilter.register("ew", lambda c, v: c.endswith(v.replace("%", "\\%")))
-SQLAlchemyFilter.register("ei", lambda c, v: c.ilike("%" + v.replace("%", "\\%")))
-SQLAlchemyFilter.register("bt", lambda c, v: c.between(v[0], v[1]))
+_SQLAlchemyFilter.register("eq", lambda c, v: c == v)  # 隐式的创建过滤器
+_SQLAlchemyFilter.register("ne", lambda c, v: c != v)
+_SQLAlchemyFilter.register("lt", lambda c, v: c < v)
+_SQLAlchemyFilter.register("le", lambda c, v: c <= v)
+_SQLAlchemyFilter.register("gt", lambda c, v: c > v)
+_SQLAlchemyFilter.register("ge", lambda c, v: c >= v)
+_SQLAlchemyFilter.register("in", lambda c, v: c.in_(v) if len(v) else False)
+_SQLAlchemyFilter.register("ni", lambda c, v: c.notin_(v) if len(v) else True)
+_SQLAlchemyFilter.register("ha", lambda c, v: c.contains(v))
+_SQLAlchemyFilter.register("ct", lambda c, v: c.like("%" + v.replace("%", "\\%") + "%"))
+_SQLAlchemyFilter.register("ci", lambda c, v: c.ilike("%" + v.replace("%", "\\%") + "%"))
+_SQLAlchemyFilter.register("sw", lambda c, v: c.startswith(v.replace("%", "\\%")))
+_SQLAlchemyFilter.register("si", lambda c, v: c.ilike(v.replace("%", "\\%") + "%"))
+_SQLAlchemyFilter.register("ew", lambda c, v: c.endswith(v.replace("%", "\\%")))
+_SQLAlchemyFilter.register("ei", lambda c, v: c.ilike("%" + v.replace("%", "\\%")))
+_SQLAlchemyFilter.register("bt", lambda c, v: c.between(v[0], v[1]))
 
 
-FIELD_FILTERS_DICT = {
+_FIELD_FILTERS_DICT = {
     Bool: ("eq", "ne", "in", "ni"),
     Date: ("eq", "ne", "lt", "le", "gt", "ge", "bt", "in", "ni"),
     DateTime: ("eq", "ne", "lt", "le", "gt", "ge", "bt"),
@@ -2749,11 +2747,11 @@ FIELD_FILTERS_DICT = {
 
 # 数据管理器，接入数据一端，可以是不同的数据库，只要实现了相同的方法
 class Manager:
-    base_filter = BaseFilter  # 指定过滤器基类，自动搜刮对应类
+    filter_class = _BaseFilter  # 指定过滤器基类，自动搜刮对应类
 
-    field_filters_dict = FIELD_FILTERS_DICT  # 可能会被重写的放在这里
+    field_filters_dict = _FIELD_FILTERS_DICT  # 可能会被重写的放在这里
 
-    PAGINATION_TYPES = (Pagination,)
+    pagination_classes = (Pagination,)
 
     def __init__(self, resource, model):
         self.resource = resource
@@ -2785,7 +2783,7 @@ class Manager:
             fields,
             meta.filters,  # meta里面还有 filters= [x,y]指定了哪些字段可以用于过滤
             field_filters_dict=self.field_filters_dict,
-            filters_name_dict=self.base_filter.filters,
+            filters_name_dict=self.filter_class.filters,
         )
         self.filters = {
             field_name: {
@@ -2997,7 +2995,7 @@ class RelationManager(Manager):
         if where:
             where = tuple(self._convert_filters(where))
             expressions = [
-                self._expression_for_condition(condition) if isinstance(condition, Condition) else condition
+                self._expression_for_condition(condition) if isinstance(condition, _Condition) else condition
                 for condition in where
             ]
             query = self._query_filter(query, self._and_expression(expressions))
@@ -3076,8 +3074,8 @@ class RelationManager(Manager):
 
 
 class SQLAlchemyManager(RelationManager):
-    base_filter = SQLAlchemyFilter
-    PAGINATION_TYPES = (Pagination, SAPagination)
+    filter_class = _SQLAlchemyFilter
+    pagination_classes = (Pagination, SAPagination)
 
     def __init__(self, resource, model):
         super().__init__(resource, model)
@@ -3094,7 +3092,7 @@ class SQLAlchemyManager(RelationManager):
             self.id_column = mapper.primary_key[0]
             self.id_attribute = mapper.primary_key[0].name
 
-        self.id_field = self._get_field_from_column_type(self.id_column, self.id_attribute, io="r")
+        self.id_field = self._get_field_from_column(self.id_column, self.id_attribute, io="r")
         self.default_sort_expression = self._get_sort_expression(model, meta, self.id_column)
 
         fs = resource.schema
@@ -3133,7 +3131,7 @@ class SQLAlchemyManager(RelationManager):
 
                 if "w" in io and not (column.nullable or column.default):
                     fs.required.add(name)
-                fs.set(name, self._get_field_from_column_type(column, name, io=io))
+                fs.set(name, self._get_field_from_column(column, name, io=io))
 
     @staticmethod
     def _get_sort_expression(model, meta, id_column):
@@ -3144,7 +3142,7 @@ class SQLAlchemyManager(RelationManager):
         attr = getattr(model, attr_name)
         return attr.desc() if reverse else attr.asc()
 
-    def _get_field_from_column_type(self, column, attribute, io="rw"):
+    def _get_field_from_column(self, column, attribute, io="rw"):
         args = ()
         kwargs = {}
 
@@ -3315,7 +3313,8 @@ class SQLAlchemyManager(RelationManager):
         session = self._get_session()
 
         actual_changes = {
-            key: value for key, value in changes.items() if self._is_change(get_value(key, item, None), value)
+            key: value for key, value in changes.items() if self._is_change(
+                _getattr(item, key, None), value)
         }
 
         try:
@@ -3451,10 +3450,11 @@ class _ItemNeed(_Need):  # HyHridItemNeed("create","user") 创建用户的权限
 
     def __call__(self, item):
         if self.method == "id":
-            return UserNeed(get_value(item, self.resource.manager.id_attribute, None))
+            return UserNeed(
+                _getattr(self.resource.manager.id_attribute, item, None))
         return ItemNeed(
             self.method,
-            get_value(item, self.resource.manager.id_attribute, None),
+            _getattr(self.resource.manager.id_attribute, item, None),
             self.type,
         )
 
@@ -3526,12 +3526,12 @@ class _UserNeed(_RelationNeed):
 class _Permission(Permission):
     def __init__(self, *needs):
         super().__init__(*needs)
-        self.__needs = set()
+        self.needs = set()
         self.standard_needs = set()
 
         for need in needs:
             if isinstance(need, _Need):
-                self.__needs.add(need)
+                self.needs.add(need)
             else:
                 self.standard_needs.add(need)
 
@@ -3552,7 +3552,7 @@ class _Permission(Permission):
             return self.require().can()
         if self.require().can():
             return True
-        for need in self.__needs:
+        for need in self.needs:
             resolved_need = need(item)  # __need 可以调用item
             if resolved_need in g.identity.provides:
                 return True
@@ -3628,7 +3628,7 @@ class _PrincipalMixin:  # 鉴权插件
                         elif role == "role":  # role:xxx
                             options.add(RoleNeed(value))  # 需要用户的角色为xxx
                         else:  # 既不是user又不是role会是啥
-                            for imported_need in target.manager._needs[role]:  # 目标的_needmaps取
+                            for imported_need in target.manager.needs[role]:  # 目标的_needmaps取
                                 if isinstance(imported_need, _ItemNeed):
                                     imported_need = imported_need.extend(field)  # 目标集合增加当前字段
                                 options.add(imported_need)
@@ -3674,12 +3674,12 @@ class _PrincipalMixin:  # 鉴权插件
             return query
 
         # filters must not be applied if not present:
-        if not permission.__needs:
+        if not permission.needs:
             return None
 
         expressions = []
 
-        for need in permission.__needs:
+        for need in permission.needs:
             ids = list(need.load_needs_from_identity())
 
             if not ids:
@@ -3755,7 +3755,7 @@ def principals(manager):
     return PrincipalsManager
 
 
-HTTP_VERBS_CN = {
+_HTTP_VERBS_CN = {
     "create": "创建{}",
     "destroy": "删除{}",
     "instances": "查询{}列表",
@@ -3781,13 +3781,13 @@ def _get_example(resource, name):
     return name
 
 
-def schema_to_swag_dict(route, resource):
+def _schema_to_swag_dict(route, resource):
     schema = route.schema_factory(resource)
     tags = [resource.meta.title or resource.meta.name]
     method = schema.get("method", "")
     href = schema.get("href", "")
     rel = schema.get("rel", "")
-    rel_cn = HTTP_VERBS_CN.get(rel, None)
+    rel_cn = _HTTP_VERBS_CN.get(rel, None)
     title = rel_cn.format(tags[0]) if rel_cn else rel
     summary = route.description or title
     flasgger_dict = {
@@ -3948,7 +3948,7 @@ class Api:
     def _register_swag_view(self, app, route, resource, view_func):
         """注册到swager"""
         with app.app_context():
-            swag_from(schema_to_swag_dict(route, resource))(view_func)
+            swag_from(_schema_to_swag_dict(route, resource))(view_func)
 
     def _register_view(self, app, rule, view_func, endpoint, methods, relation):
         decorate_view_func = relation != "describedBy" or app.config["RESTONE_DECORATE_SCHEMA_ENDPOINTS"]
@@ -3975,7 +3975,7 @@ class Api:
             resp = view(*args, **kwargs)
             if isinstance(resp, Response):
                 return resp
-            (data, code, headers) = unpack(resp)
+            (data, code, headers) = _unpack(resp)
             return _make_response(data, code, headers)
 
         return wrapper

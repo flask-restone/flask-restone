@@ -1230,10 +1230,21 @@ class ResUri(Field):
         return f"{self.target.route_prefix}/{self.target.manager.id_field.faker()}"
 
 
+class _DummySchema(Schema):  # 简化格式实现
+    def __init__(self, schema):
+        self._schema = schema
+
+    def schema(self):
+        return self._schema
+
+       
 class FieldSet(Schema, _ResourceMixin):
     """
     字段集:
         用于描述资源所有的字段
+        
+    FieldSet({'name':Str,'age':Int})
+    FieldSet(name=Str,age=Int)
     """
 
     def __init__(self, fields, required_fields=None):
@@ -1292,14 +1303,7 @@ class FieldSet(Schema, _ResourceMixin):
 
     @cached_property
     def patchable(self):  # 可更新性的schema
-        class DummySchema(Schema):  # 简化格式实现
-            def __init__(self, schema):
-                self._schema = schema
-
-            def schema(self):
-                return self._schema
-
-        return DummySchema(self._schema(True))
+        return _DummySchema(self._schema(True))
 
     @cached_property
     def all_fields_optional(self):  # 可选的字段
@@ -1584,7 +1588,7 @@ class _Key(Schema, _ResourceMixin):
         return self.__class__().bind(resource=resource)
 
 
-class _RefKey(_Key):
+class RefKey(_Key):
     @property
     def matcher_type(self):
         return "object"
@@ -1613,7 +1617,7 @@ class _RefKey(_Key):
         return self.resource.manager.read(args["id"])
 
 
-class _IDKey(_Key):
+class IDKey(_Key):
     def _on_bind(self, resource):
         self.id_field = resource.manager.id_field
 
@@ -1928,8 +1932,7 @@ class Route:
         locals()[method] = _route_decorator(method)
         locals()[method.lower()] = locals()[method]
     # 使用locals 在当前作用域来设置批量类方法
-
-
+    
 class ItemRoute(Route):  # 单个记录
     def rule_factory(self, resource, relative=False):
         rule = self.rule
@@ -2553,7 +2556,7 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
             "copy",
             "test",
         )
-        key_converters = (_RefKey(), _IDKey())
+        key_converters = (RefKey(), IDKey())
         datetime_formatter = DateTime
         natural_key = None
 

@@ -174,15 +174,15 @@ class Forbidden(RestoneException):
     status_code = 403
 
 
-# JSON Schema，也称为JSON模式。JSON Schema是描述你的JSON数据格式；
+# JSON _Schema，也称为JSON模式。JSON Schema是描述你的JSON数据格式；
 # 主要有以下作用：
 # 对现有的json数据格式进行描述（字段类型、内容长度、是否必须存在、取值示例等）；
 # 是一个描述清晰、人机可读的文档；
 # 自动测试、验证客户端提交的数据；
 # ---------------------------请求与响应格式----------------------
-class Schema(ABC):
+class _Schema(ABC):
     """
-    Schema 描述JSON数据格式
+    _Schema 描述JSON数据格式
 
     schema 返回二元组或三元组
     二元组
@@ -251,7 +251,7 @@ class Schema(ABC):
 
 
 # ----------------字段格式------------
-class Field(Schema):
+class Field(_Schema):
     """
     基本字段模式
     属性：
@@ -357,7 +357,7 @@ class Field(Schema):
         schema = self._schema  # 格式可执行则执行
         if callable(schema):
             schema = schema()
-        if isinstance(schema, Schema):
+        if isinstance(schema, _Schema):
             (read_schema, write_schema) = (schema.response, schema.request)
         elif isinstance(schema, tuple):
             (read_schema, write_schema) = schema
@@ -695,8 +695,8 @@ def _field_from_object(parent, schema):  # 从对象获取字段
     else:
         container = schema  # 实例
 
-    if not isinstance(container, Schema):  # 实例不是格式类
-        raise RuntimeError(f"{parent} expected BaseField or Schema, but got {container.__class__.__name__}")
+    if not isinstance(container, _Schema):  # 实例不是格式类
+        raise RuntimeError(f"{parent} expected BaseField or _Schema, but got {container.__class__.__name__}")
     if not isinstance(container, Field):  # 实例不是BaseField 类,是json
         container = Field(container)
     return container
@@ -726,7 +726,7 @@ class _BindMixin:
         )
 
 
-def _bind(schema, resource) -> Schema:  # 将格式与资源绑定
+def _bind(schema, resource) -> _Schema:  # 将格式与资源绑定
     if isinstance(schema, _BindMixin):
         return schema.bind(resource)
     return schema
@@ -808,12 +808,12 @@ class Tuple(Field):
 
 class Dict(Field, _BindMixin):
     """
-    在 JSON Schema 中，'patternProperties'是一个关键字，用于描述对象属性的模式。
+    在 JSON _Schema 中，'patternProperties'是一个关键字，用于描述对象属性的模式。
     它是一个用于限制 JSON 数据中对象属性模式的关键字，可以用来描述对象中所有匹配某个
     正则表达式模式的属性的限制条件。
     'patternProperties'关键字的值是一个对象，其中每个属性的名称是一个正则表达式模式，
-    用于匹配对象中的属性名；每个属性的值是一个 JSON Schema 对象，用于描述对象中对应属性的限制条件。
-    例如，以下 JSON Schema 用于描述一个具有两个属性的对象，其中属性名必须以大写字母'A'或'B'开头，属性值必须为整数：
+    用于匹配对象中的属性名；每个属性的值是一个 JSON _Schema 对象，用于描述对象中对应属性的限制条件。
+    例如，以下 JSON _Schema 用于描述一个具有两个属性的对象，其中属性名必须以大写字母'A'或'B'开头，属性值必须为整数：
 
     {
       "type": "object",
@@ -828,9 +828,9 @@ class Dict(Field, _BindMixin):
       "additionalProperties": false
     }
     在这个例子中，'patternProperties'的值是一个对象，其中包含两个属性，分别是以'A'和'B'开头的属性名的正则表达式模式。
-    每个属性的值是一个 JSON Schema 对象，用于描述属性的限制条件。
-    该 JSON Schema 还使用了'additionalProperties'关键字，用于禁止出现除了以'A'和'B'开头的属性名以外的其他属性。
-    使用'patternProperties'关键字可以使 JSON Schema 更加灵活，可以描述更加复杂的数据结构。
+    每个属性的值是一个 JSON _Schema 对象，用于描述属性的限制条件。
+    该 JSON _Schema 还使用了'additionalProperties'关键字，用于禁止出现除了以'A'和'B'开头的属性名以外的其他属性。
+    使用'patternProperties'关键字可以使 JSON _Schema 更加灵活，可以描述更加复杂的数据结构。
     """
 
     def __init__(
@@ -1008,7 +1008,7 @@ class ModelDict(Dict):
         return instance
 
 
-class ResourceRef:
+class _ResourceRef:
     def __init__(self, value):
         self.value = value
 
@@ -1041,7 +1041,7 @@ class Ref(Field, _BindMixin):
     """
 
     def __init__(self, resource, **kwargs):  # resource可以是名称
-        self.target_reference = ResourceRef(resource)
+        self.target_reference = _ResourceRef(resource)
 
         def schema():
             # key_converters 是个元组，第一个是响应体中的键转换器，第二个是请求体中的键转换器
@@ -1094,13 +1094,13 @@ class Ref(Field, _BindMixin):
 class Res(Field, _BindMixin):  # 内联 默认不可更新
     """内联对象就是将一个资源完整嵌入
 
-    JSON Schema 可以使用 $ref 关键字来表示递归的数据结构。
-    $ref 关键字用于引用另一个位置的 JSON Schema，
-    这样可以在同一个 Schema 中多次使用同一个定义，或者在不同的 Schema 中使用相同的定义。
+    JSON _Schema 可以使用 $ref 关键字来表示递归的数据结构。
+    $ref 关键字用于引用另一个位置的 JSON _Schema，
+    这样可以在同一个 _Schema 中多次使用同一个定义，或者在不同的 _Schema 中使用相同的定义。
     """
 
     def __init__(self, resource, patchable=False, **kwargs):
-        self.target_reference = ResourceRef(resource)
+        self.target_reference = _ResourceRef(resource)
         self.patchable = patchable
 
         def schema():
@@ -1202,7 +1202,7 @@ class Optional(Field):
 
 class ResUri(Field):
     def __init__(self, resource, attribute=None):
-        self.target_reference = ResourceRef(resource)
+        self.target_reference = _ResourceRef(resource)
         super().__init__(
             lambda: {
                 "type": "string",
@@ -1227,7 +1227,7 @@ class ResUri(Field):
         return f"{self.target.route_prefix}/{self.target.manager.id_field.faker()}"
 
 
-class _DummySchema(Schema):  # 简化格式实现
+class _DummySchema(_Schema):  # 简化格式实现
     def __init__(self, schema):
         self._schema = schema
 
@@ -1235,7 +1235,7 @@ class _DummySchema(Schema):  # 简化格式实现
         return self._schema
 
        
-class FieldSet(Schema, _BindMixin):
+class FieldSet(_Schema, _BindMixin):
     """
     字段集:
         用于描述资源所有的字段
@@ -1418,7 +1418,7 @@ class _PaginationMixin:  # 分页插件不能单独使用
         pass
 
 
-class Instances(_PaginationMixin, Schema, _BindMixin):
+class Instances(_PaginationMixin, _Schema, _BindMixin):
     query_params = ("where", "sort")
 
     def __init__(self, required_fields=None, item_decorator=None):  # 2.23 新增可选展示的字段
@@ -1573,7 +1573,7 @@ class Instances(_PaginationMixin, Schema, _BindMixin):
         return sort, where
 
 
-class _Key(Schema, _BindMixin):
+class _Key(_Schema, _BindMixin):
     @property
     def matcher_type(self):
         type_ = self.response["type"]
@@ -1744,7 +1744,7 @@ def _method_decorator(method):
     return wrapper
 
 
-HTTP_VERBS = {
+_HTTP_VERBS = {
     "GET": "read",
     "PUT": "update",
     "POST": "create",
@@ -1801,7 +1801,7 @@ class Route:
         if self.rel:
             return self.rel  # 关联字符串 read_status?
 
-        verb = HTTP_VERBS.get(self.method, self.method.lower())
+        verb = _HTTP_VERBS.get(self.method, self.method.lower())
         return _camel_case(f"{verb}_{self.attribute}")
 
     def schema_factory(self, resource):  # 规则工厂 将路由的请求与响应规则绑定到资源上
@@ -1914,7 +1914,7 @@ class Route:
             instance = resource()  # 资源实例
             if isinstance(request_schema, (FieldSet, Instances)):  # 请求字段集和实例集
                 kwargs.update(request_schema.parse_request(request))  # 上文实现了
-            elif isinstance(request_schema, Schema):  # 普通的格式
+            elif isinstance(request_schema, _Schema):  # 普通的格式
                 args += (request_schema.parse_request(request),)  # 为何是元组
             response = view_func(instance, *args, **kwargs)
             if not isinstance(response, tuple) and self.success_code:
@@ -1954,15 +1954,15 @@ class ItemRoute(Route):  # 单个记录
         return view
 
 
-class RouteSet(ABC):
+class _RouteSet(ABC):
     @abstractmethod
     def routes(self):
         pass
 
 
-class Relation(RouteSet, _BindMixin):  # 关系型也是RouteSet子类
+class Relation(_RouteSet, _BindMixin):  # 关系型也是RouteSet子类
     def __init__(self, resource, uselist=True, io="rw", attribute=None):
-        self.reference = ResourceRef(resource)  # 找到关联的资源类
+        self.reference = _ResourceRef(resource)  # 找到关联的资源类
         self.attribute = attribute  # 属性名
         self.io = io
         self.uselist = uselist
@@ -2084,7 +2084,7 @@ class Relation(RouteSet, _BindMixin):  # 关系型也是RouteSet子类
                 )
 
 
-class AttrRoute(RouteSet):  # 单个记录的属性路由
+class AttrRoute(_RouteSet):  # 单个记录的属性路由
     def __init__(self, schema, io=None, attribute=None, description=None):
         self.field = _field_from_object(AttrRoute, schema)
         self.attribute = attribute
@@ -2125,7 +2125,7 @@ class AttrRoute(RouteSet):  # 单个记录的属性路由
             )
 
 
-class TaskRoute(RouteSet):
+class TaskRoute(_RouteSet):
     def __init__(self, func, backend, bind=True, attribute=None):
         self.long_task = backend.task(func, bind=bind)
         annotations = func.__annotations__
@@ -2263,10 +2263,10 @@ class _ResourceMeta(type):
             meta["name"] = name.lower()
 
         for base in bases:
-            if hasattr(base, "Schema"):
-                schema.update(base.Schema.__dict__)
-        if "Schema" in members:
-            schema.update(members["Schema"].__dict__)
+            if hasattr(base, "_Schema"):
+                schema.update(base._Schema.__dict__)
+        if "_Schema" in members:
+            schema.update(members["_Schema"].__dict__)
 
         if schema:
             class_.schema = fs = FieldSet(
@@ -2606,7 +2606,7 @@ class _Condition:  # 属性 过滤器 值
         return self.filter.op(_getattr(item, self.attribute, None), self.value)
 
 
-class _BaseFilter(Schema):
+class _BaseFilter(_Schema):
     name = None
     filters = {}
 
@@ -2942,7 +2942,7 @@ class Manager:
         pass
 
 
-class RelationManager(Manager):
+class _RelationManager(Manager):
     def _query(self):
         raise NotImplementedError
 
@@ -3073,7 +3073,7 @@ class RelationManager(Manager):
                     raise InvalidFilter(f"Filter <{name}> is not allowed")
 
 
-class SQLAlchemyManager(RelationManager):
+class SQLAlchemyManager(_RelationManager):
     filter_class = _SQLAlchemyFilter
     pagination_classes = (Pagination, SAPagination)
 
@@ -3165,7 +3165,7 @@ class SQLAlchemyManager(RelationManager):
                 python_type = column.type.python_type
             except NotImplementedError:
                 raise RuntimeError(
-                    f"Unable to auto-detect the correct field type for {column}! You need to specify it manually in ModelResource.Schema"
+                    f"Unable to auto-detect the correct field type for {column}! You need to specify it manually in ModelResource._Schema"
                 )
             field_class = self._get_field_from_python_type(python_type)
 
@@ -3569,7 +3569,7 @@ class _PrincipalMixin:  # 鉴权插件
     @cached_property
     def _needs(self):
         """
-        class Schema:
+        class _Schema:
             id = UUID()
             name = Str()
             age = Int()
@@ -3746,8 +3746,8 @@ class _PrincipalMixin:  # 鉴权插件
 
 
 def principals(manager):
-    if not issubclass(manager, RelationManager):
-        raise RuntimeError("principals() only works with managers that inherit from RelationManager")
+    if not issubclass(manager, _RelationManager):
+        raise RuntimeError("principals() only works with managers that inherit from _RelationManager")
 
     class PrincipalsManager(_PrincipalMixin, manager):
         pass
@@ -4027,8 +4027,8 @@ class Api:
             route_decorator = resource.meta.route_decorators.get(route.relation, None)
             # route.relation 是字符 如"read_xxx" 则是 装饰器字典，用于装饰这个函数
             self.add_route(route, resource, decorator=route_decorator)
-        # 以键值对返回成员 返回满足 lambda m: isinstance(m, RouteSet) 的成员，也就是 RouteSet及子类的实例
-        for name, rset in inspect.getmembers(resource, lambda m: isinstance(m, RouteSet)):
+        # 以键值对返回成员 返回满足 lambda m: isinstance(m, _RouteSet) 的成员，也就是 RouteSet及子类的实例
+        for name, rset in inspect.getmembers(resource, lambda m: isinstance(m, _RouteSet)):
             if rset.attribute is None:
                 rset.attribute = name
                 # 没有属性就用自己名字做属性 如 status = AttrRoute(field_cls_or_instance,io='ru')

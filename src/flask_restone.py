@@ -2206,8 +2206,19 @@ class TaskRoute(RouteSet):
             rel=f"taskstatus",
             description="start task",
         )
-
-
+        
+        def stoptask(resource, item, task_id):
+            task = self.long_task.AsyncResult(task_id)
+            task.revoke(terminate=True)
+            return '',204
+        
+        yield task_status_route.for_method(
+            "DELETE",
+            stoptask,
+            rel=f"stoptask",
+            description="stop task",
+        )
+        
 class _AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__

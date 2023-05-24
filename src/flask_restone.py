@@ -39,8 +39,9 @@ from werkzeug.http import HTTP_STATUS_CODES
 from werkzeug.utils import cached_property
 from werkzeug.wrappers import Response
 
+# ----------------------------------------通用常量-------------------------------
+
 _faker = Faker()
-# ---------------------------HTTP常量--------------------
 GET = "GET"
 PUT = "PUT"
 POST = "POST"
@@ -56,7 +57,7 @@ WHERE = "where"
 
 DEFAULT_PER_PAGE = 20
 MAX_PER_PAGE = 100
-# ---------------------------信号量--------------------
+# ----------------------------------------内置信号-------------------------------
 _signals = Namespace()
 before_create = _signals.signal("before-create")
 after_create = _signals.signal("after-create")
@@ -70,7 +71,7 @@ before_remove = _signals.signal("before-remove")
 after_remove = _signals.signal("after-remove")
 
 
-# ---------------------------异常----------------------
+# ----------------------------------------异常处理-------------------------------
 class RestoneException(Exception):
     status_code = 500
 
@@ -189,7 +190,8 @@ class Forbidden(RestoneException):
 # 对现有的json数据格式进行描述（字段类型、内容长度、是否必须存在、取值示例等）；
 # 是一个描述清晰、人机可读的文档；
 # 自动测试、验证客户端提交的数据；
-# ---------------------------请求与响应格式----------------------
+
+# ---------------------------请求与响应格式化----------------------
 class _Schema(ABC):
     """
     _Schema 描述JSON数据格式
@@ -260,7 +262,7 @@ class _Schema(ABC):
         return self.format(data), code, headers
 
 
-# ----------------字段格式------------
+# ----------------------------------------字段格式-------------------------------
 class Field(_Schema):
     """
     基本字段模式
@@ -1725,7 +1727,7 @@ def _getattr(obj, key, default=None):
     return getattr(obj, key, default)
 
 
-# -----------------自动路由----------------------------------------------
+# ----------------------------------------自动路由-------------------------------
 def _route_decorator(method):  # 路由装饰器
     def decorator(cls, *args, **kwargs):
         if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
@@ -2625,7 +2627,7 @@ class Pagination:
         return Pagination(items[start: start + per_page], page, per_page, len(items))
 
 
-# -------------------过滤器-------------------------------------
+# ----------------------------------------过滤查询-------------------------------
 class _Condition:  # 属性 过滤器 值
     def __init__(self, attribute, filter, value): # noqa
         self.attribute = attribute
@@ -3427,7 +3429,7 @@ class SQLAlchemyManager(_RelationManager):
             session.flush()
 
 
-# ----------------------permissions----------------------------------
+# ----------------------------------------权限控制-------------------------------
 class _Need:  # 混合需求
     def __call__(self, item):
         raise NotImplementedError

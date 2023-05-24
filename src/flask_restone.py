@@ -1819,9 +1819,9 @@ class route:  # noqa
             self.response_schema = response_schema
 
         self.related_routes = ()  # 相关的路由
-        for method in HTTP_METHODS:
-            setattr(self, method, MethodType(_method_decorator(method), self))  # 把方法绑定到类的实例中
-            setattr(self, method.lower(), getattr(self, method))  # 忽略大小写GET成为装饰器
+        
+        for method in HTTP_METHODS:  # 把方法绑定到类的实例中
+            setattr(self, method.lower(), MethodType(_method_decorator(method), self))
 
     @property
     def relation(self):  # 关系型数据资源
@@ -2091,7 +2091,7 @@ class Relation(_RouteSet, _BindMixin):  # 关系型也是RouteSet子类
                 )
             if "w" in io or "u" in io:
                 def relation_add(resource, item, target_item):
-                    target_item = self.target.manager.create(target_item) # fixme
+                    target_item = self.target.manager.create(target_item)  # fixme
                     resource.manager.relation_add(item, self.attribute, self.target, target_item)
                     resource.manager.commit()
                     return target_item

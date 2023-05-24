@@ -2159,8 +2159,8 @@ class AttrRoute(_RouteSet):  # 单个记录的属性路由
 
 
 class TaskRoute(_RouteSet):
-    def __init__(self, func, backend, bind=True, attribute=None):
-        self.long_task = backend.task(func, bind=bind)
+    def __init__(self, func, attribute=None):
+        self.long_task = func
         annotations = func.__annotations__
 
         self.schema = FieldSet(
@@ -3884,11 +3884,6 @@ def _schema_to_swag_dict(route, resource): # noqa
                 "schema": request_schema,
             }
         )
-
-        flasgger_dict["responses"]["200"] = {
-            "description": "success",
-            "examples": '{"result":"success"}',
-        }
 
     return flasgger_dict
 

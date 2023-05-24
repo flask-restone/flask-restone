@@ -504,7 +504,7 @@ class Str(Field):
 class Int(Field):
     url_rule_converter = "int"
 
-    def __init__(self, minimum=None, maximum=None, /, default=None, **kwargs):
+    def __init__(self, minimum=None, maximum=None, default=None, **kwargs):
         schema = {"type": "integer"}
         if minimum is not None:
             schema["minimum"] = minimum

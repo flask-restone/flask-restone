@@ -18,5 +18,5 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/arry-lee/flask_restone"
-"Bug Tracker" = "https://github.com/arry-lee/flask_restone/issues"
+"Homepage" = "https://github.com/arry-lee/flask-restone"
+"Bug Tracker" = "https://github.com/arry-lee/flask-restone/issues"

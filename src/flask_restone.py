@@ -2405,7 +2405,7 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
 
     instances.request_schema = instances.response_schema = Instances()
 
-    @instances.POST(rel="create")  # 明白了rel是内部用的用于定位视图的，作为key
+    @instances.post(rel="create")  # 明白了rel是内部用的用于定位视图的，作为key
     def create(self, properties):
         # 新增 如果是内联的字典且其field 是inline 则创建先创建之
         props = {}

@@ -6,7 +6,7 @@ flask_restone 是一个基于 Flask 的 RESTful API 框架，提供了以下特�
 ### Abstract:
 
 - Schema：用于数据模型的定义
-- BaseField：模型属性的基础类
+- Field：模型属性的基础类
 
 ### Fields:
 
@@ -63,42 +63,21 @@ Tuple：元组类型
 - Tuple[Str,Int]：表示由字符串和整数组成的元组
 - Tuple[Int,Int,Int]：表示含有三个整数元素的元组
 
-Format：格式化类型
-- Format["uuid"]：表示符合 UUID 规范的字符串
-- UUID：表示 UUID 类型
-- URI：表示 URI 类型
-- EMAIL：表示 EMAIL 类型
-- ...
-
-Pattern：模式类型
-- Pattern["\d{4}"]：表示匹配满足正则表达式 "\d{4}" 的字符串
-
-Literal：字面量
-- Literal["a","b","c"]：表示枚举类型，取值为 a、b 或 c
-
 Optional：可选类型
 - Optional[Str]：表示可选字符串类型
-
-ReadOnly：只读类型
-- ReadOnly[Str]：表示只读字符串类型
-
-WriteOnly：只写类型
-- WriteOnly[Str]：表示不可读、只写字符串类型
-
-Union：联合类型
-- Union[Str,Int]：表示字符串或整数类型
 
 Any：任意类型
 - Any：表示任何数据类型，不做特定的检查
 
-### Route:
+### route:
 
-- @Route.get：GET 请求
-- @Route.post：POST 请求
-- @Route.patch：PATCH 请求，用于批量操作
-- @ItemRoute.get：获取单个资源
-- @ItemRoute.put：更新单个资源
-- @ItemRoute.delete：删除单个资源
+- @route.get：GET 请求
+- @route.post：POST 请求
+- @route.patch：PATCH 请求，用于批量操作
+- @itemroute.get：获取单个资源
+- @itemroute.put：更新单个资源
+- @itemroute.delete：删除单个资源
+
 ### RouteSet:
 
 - AttrRoute：属性路由
@@ -117,8 +96,7 @@ Pagination:
 
 - RelationManager：关系管理器
 - SQLAlchemyManager：SQLAlchemy 管理器
-- DataFrameManager：DataFrame 管理器
-- PricipalManager：权限管理器
+- PrincipalManager：权限管理器
 ### Needs & Permissions:
 
 需求和权限
@@ -132,11 +110,10 @@ Pagination:
 - after_delete：删除资源后的信号
 - before_relate：关联资源前的信号
 - after_relate：关联资源后的信号
-- before_unrelate：解除关联资源前的信号
-- after_unrelate：解除关联资源后的信号 
+- before_remove：解除关联资源前的信号
+- after_remove：解除关联资源后的信号 
 - ModelResource.on_before_create：模型资源创建前的信号
 
 ### API:
 
 - swagger：API 文档生成
-- docxtemplate：使用模板生成 Word 文档

@@ -2091,7 +2091,7 @@ class Relation(_RouteSet, _BindMixin):  # 关系型也是RouteSet子类
                 )
             if "w" in io or "u" in io:
                 def relation_add(resource, item, target_item):
-                    target_item = self.target.manager.create(target_item)  # 此处是增加
+                    target_item = self.target.manager.create(target_item) # fixme
                     resource.manager.relation_add(item, self.attribute, self.target, target_item)
                     resource.manager.commit()
                     return target_item
@@ -3406,8 +3406,10 @@ class SQLAlchemyManager(_RelationManager):
         after_relate.send(self.resource, item=item, attribute=attribute, child=target_item)
 
     def relation_remove(self, item, attribute, target_resource, target_item):
+        session = self._get_session()
         before_remove.send(self.resource, item=item, attribute=attribute, child=target_item)
         try:
+            session.delete(target_item)
             getattr(item, attribute).remove(target_item)
             after_remove.send(self.resource, item=item, attribute=attribute, child=target_item)
         except ValueError:

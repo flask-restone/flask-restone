@@ -870,9 +870,7 @@ class Dict(Field, _BindMixin):
         self.other_props = None
 
         if properties is None and kwargs:
-            self.properties = {
-                k: _init_field(v) for k, v in kwargs.items() if isinstance(v, (type, Field, str))
-            }
+            self.properties = {k: _init_field(v) for k, v in kwargs.items() if isinstance(v, (type, Field, str))}
 
         elif isinstance(properties, dict):  # properties 是键名和字段的字典
             self.properties = {k: _init_field(v) for k, v in properties.items()}  # 如果不给字典，就没有这个属性
@@ -1768,7 +1766,9 @@ def has_only_docstring(fn):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # 如果函数/方法定义中只有一个表达式语句且表达式是字符串字面值，则函数/方法只包含 docstring
             if (
-                len(node.body) == 1 and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Str)  # noqa
+                len(node.body) == 1
+                and isinstance(node.body[0], ast.Expr)
+                and isinstance(node.body[0].value, ast.Str)  # noqa
             ):
                 return True
             # 如果函数/方法定义中只有一个简单语句且是 pass，则函数/方法只包含 docstring
@@ -2169,9 +2169,7 @@ class TaskRoute(_RouteSet):
         self.long_task = func
         annotations = func.__annotations__
 
-        self.schema = FieldSet(
-            {name: _init_field(field) for (name, field) in annotations.items() if name != "return"}
-        )
+        self.schema = FieldSet({name: _init_field(field) for (name, field) in annotations.items() if name != "return"})
 
         self.attribute = attribute
 
@@ -2970,138 +2968,7 @@ class Manager:
         pass
 
 
-class _RelationManager(Manager):
-    def _query(self):
-        raise NotImplementedError
-
-    def _query_filter(self, query, expression):
-        raise NotImplementedError
-
-    def _query_filter_by_id(self, query, id):  # noqa
-        raise NotImplementedError
-
-    def _expression_for_join(self, attribute, expression):
-        raise NotImplementedError
-
-    def _expression_for_ids(self, ids):
-        raise NotImplementedError
-
-    def _expression_for_condition(self, condition):
-        raise NotImplementedError
-
-    def _or_expression(self, expressions):
-        raise NotImplementedError
-
-    def _and_expression(self, expressions):
-        raise NotImplementedError
-
-    def _query_order_by(self, query, sort=None):
-        raise NotImplementedError
-
-    def _query_get_paginated_items(self, query, page, per_page):
-        raise NotImplementedError
-
-    def _query_get_all(self, query):
-        raise NotImplementedError
-
-    def _query_get_one(self, query):
-        raise NotImplementedError
-
-    def _query_get_first(self, query):
-        raise NotImplementedError
-
-    def paginated_instances(self, page, per_page, where=None, sort=None, options=None):
-        instances = self.instances(where=where, sort=sort, options=options)
-        if isinstance(instances, list):  # 这里是方便我们实现别的接口返回list
-            return Pagination.from_list(instances, page, per_page)
-        return self._query_get_paginated_items(instances, page, per_page)
-
-    def instances(self, where=None, sort=None, options=None):
-        query = self._query()
-        if query is None:
-            return []
-        if where:
-            where = tuple(self._convert_filters(where))
-            expressions = [
-                self._expression_for_condition(condition) if isinstance(condition, _Condition) else condition
-                for condition in where
-            ]
-            query = self._query_filter(query, self._and_expression(expressions))
-        if sort:
-            sort = tuple(self._convert_sort(sort))
-            query = self._query_order_by(query, sort)
-        if options:
-            query = query.with_entities(*options)
-        return query
-
-    @cached_property
-    def _sort_fields(self):
-        return {
-            name: field
-            for (name, field) in self.resource.schema.readable_fields.items()
-            if name in self.filters and self._is_sortable_field(field)
-        }
-
-    def _convert_sort(self, sort):
-        for name, reverse in sort.items():
-            field = self._sort_fields[name]
-            yield field, field.attribute or name, reverse
-
-    def first(self, where=None, sort=None):
-        try:
-            return self._query_get_first(self.instances(where, sort))
-        except IndexError:
-            raise ItemNotFound(self.resource, where=where)
-
-    def read(self, id):  # noqa
-        query = self._query()
-        if query is None:
-            raise ItemNotFound(self.resource, id=id)
-        return self._query_filter_by_id(query, id)
-
-    def all(self, where=None, sort=None):
-        try:
-            return self._query_get_all(self.instances(where, sort))
-        except IndexError:
-            raise ItemNotFound(self.resource, where=where)
-
-    @staticmethod
-    def convert_filters(value, field_filters):
-        if isinstance(value, dict) and len(value) == 1:
-            filter_name = next(iter(value))
-            if filter_name.startswith("$") and len(filter_name) > 1:
-                filter_name = filter_name[1:]
-                ft = field_filters.get(filter_name, None)
-                if ft is not None:
-                    return ft.convert(value)
-        ft = field_filters.get("eq", None)
-        if ft is None:
-            raise ValueError("Filter 'eq' is not defined")
-        return ft.convert({"$eq": value})
-
-    def _convert_filters(self, where):  # 将转换where的步骤移到manager中，使得在查询之前可以修改where
-        for name, value in where.items():
-            if "." in name:
-                # Todo 这里初步实现了联合查询，只支持一个级别的外键，即只有1个.号
-                k, v = name.rsplit(".", 1)
-                target = self.resource.schema.fields[k].target
-                condition = self.convert_filters(value, target.manager.filters[v])
-                expression = target.manager._expression_for_condition(condition)  # noqa
-                yield self._expression_for_join(k, expression)  # 返回表达式
-            elif name == "$like":
-                or_expressions = []
-                for field_name in self.resource.meta.get("fuzzy_fields", ()):
-                    condition = self.convert_filters({"$ci": value["$eq"]}, self.filters[field_name])
-                    or_expressions.append(self._expression_for_condition(condition))
-                yield self._or_expression(or_expressions)
-            else:
-                try:
-                    yield self.convert_filters(value, self.filters[name])  # Condition条件实力
-                except KeyError:
-                    raise InvalidFilter(f"Filter <{name}> is not allowed")
-
-
-class SQLAlchemyManager(_RelationManager):
+class SQLAlchemyManager(Manager):
     filter_class = _SQLAlchemyFilter
     pagination_classes = (Pagination, _Pagination)
 
@@ -3428,6 +3295,96 @@ class SQLAlchemyManager(_RelationManager):
             session.commit()
         else:
             session.flush()
+
+    def paginated_instances(self, page, per_page, where=None, sort=None, options=None):
+        instances = self.instances(where=where, sort=sort, options=options)
+        if isinstance(instances, list):  # 这里是方便我们实现别的接口返回list
+            return Pagination.from_list(instances, page, per_page)
+        return self._query_get_paginated_items(instances, page, per_page)
+
+    def instances(self, where=None, sort=None, options=None):
+        query = self._query()
+        if query is None:
+            return []
+        if where:
+            where = tuple(self._convert_filters(where))
+            expressions = [
+                self._expression_for_condition(condition) if isinstance(condition, _Condition) else condition
+                for condition in where
+            ]
+            query = self._query_filter(query, self._and_expression(expressions))
+        if sort:
+            sort = tuple(self._convert_sort(sort))
+            query = self._query_order_by(query, sort)
+        if options:
+            query = query.with_entities(*options)
+        return query
+
+    @cached_property
+    def _sort_fields(self):
+        return {
+            name: field
+            for (name, field) in self.resource.schema.readable_fields.items()
+            if name in self.filters and self._is_sortable_field(field)
+        }
+
+    def _convert_sort(self, sort):
+        for name, reverse in sort.items():
+            field = self._sort_fields[name]
+            yield field, field.attribute or name, reverse
+
+    def first(self, where=None, sort=None):
+        try:
+            return self._query_get_first(self.instances(where, sort))
+        except IndexError:
+            raise ItemNotFound(self.resource, where=where)
+
+    def read(self, id):  # noqa
+        query = self._query()
+        if query is None:
+            raise ItemNotFound(self.resource, id=id)
+        return self._query_filter_by_id(query, id)
+
+    def all(self, where=None, sort=None):
+        try:
+            return self._query_get_all(self.instances(where, sort))
+        except IndexError:
+            raise ItemNotFound(self.resource, where=where)
+
+    @staticmethod
+    def convert_filters(value, field_filters):
+        if isinstance(value, dict) and len(value) == 1:
+            filter_name = next(iter(value))
+            if filter_name.startswith("$") and len(filter_name) > 1:
+                filter_name = filter_name[1:]
+                ft = field_filters.get(filter_name, None)
+                if ft is not None:
+                    return ft.convert(value)
+        ft = field_filters.get("eq", None)
+        if ft is None:
+            raise ValueError("Filter 'eq' is not defined")
+        return ft.convert({"$eq": value})
+
+    def _convert_filters(self, where):  # 将转换where的步骤移到manager中，使得在查询之前可以修改where
+        for name, value in where.items():
+            if "." in name:
+                # Todo 这里初步实现了联合查询，只支持一个级别的外键，即只有1个.号
+                k, v = name.rsplit(".", 1)
+                target = self.resource.schema.fields[k].target
+                condition = self.convert_filters(value, target.manager.filters[v])
+                expression = target.manager._expression_for_condition(condition)  # noqa
+                yield self._expression_for_join(k, expression)  # 返回表达式
+            elif name == "$like":
+                or_expressions = []
+                for field_name in self.resource.meta.get("fuzzy_fields", ()):
+                    condition = self.convert_filters({"$ci": value["$eq"]}, self.filters[field_name])
+                    or_expressions.append(self._expression_for_condition(condition))
+                yield self._or_expression(or_expressions)
+            else:
+                try:
+                    yield self.convert_filters(value, self.filters[name])  # Condition条件实力
+                except KeyError:
+                    raise InvalidFilter(f"Filter <{name}> is not allowed")
 
 
 # ----------------------------------------权限控制-------------------------------
@@ -3773,10 +3730,7 @@ class _PrincipalMixin:  # 鉴权插件
         raise Forbidden()
 
 
-def principals(manager):
-    if not issubclass(manager, _RelationManager):
-        raise RuntimeError("principals() only works with managers that inherit from _RelationManager")
-
+def principals(manager: Manager):
     class PrincipalsManager(_PrincipalMixin, manager):
         pass
 

@@ -1753,10 +1753,10 @@ _HTTP_VERBS = {
 }
 
 
-def has_only_docstring(fn):
+def has_only_docstring(method):
     """判断函数或方法是否只有 docstring，没有其他内容"""
     # 获取函数/方法定义的源代码
-    source_lines, _ = inspect.getsourcelines(fn)
+    source_lines, _ = inspect.getsourcelines(method)
     leading_spaces = len(source_lines[0]) - len(source_lines[0].lstrip())
     stripped_source = "".join(line[leading_spaces:] for line in source_lines)
     # 使用 ast 模块解析源代码，获取函数/方法定义的抽象语法树
@@ -2397,60 +2397,28 @@ _RFC6902_PATCH = List(
 class ModelResource(Resource, metaclass=_ModelResourceMeta):
     manager = None
 
-    @classmethod
-    def faker(cls, io="r"):
-        if io == "r":
-            return {k: f.faker() for k, f in cls.schema.fields.items()}
-        return {k: f.faker() for k, f in cls.schema.fields.items() if f.io != "r"}
-
-    @route.get("", rel="instances")
+    @route.get("", rel="instances", schema=Instances(), response_schema=Instances())
     def instances(self, **kwargs):
         return self.manager.paginated_instances(**kwargs)
 
-    instances.request_schema = instances.response_schema = Instances()
-
-    @instances.post(rel="create")  # 明白了rel是内部用的用于定位视图的，作为key
+    @instances.post(rel="create", schema=Res("self"), response_schema=Res("self"))  # 明白了rel是内部用的用于定位视图的，作为key
     def create(self, properties):
-        # 新增 如果是内联的字典且其field 是inline 则创建先创建之
-        props = {}
-        inlines = []
-
-        for k, v in properties.items():
-            field = self.schema.fields[k]
-            if isinstance(field, Res):
-                inst = field.target.manager.create(v, commit=False)  # 使用目标字段的create方法，这样即使还有内联也可以直接创建
-                props[f"{k}_id"] = inst.id
-                inlines.append(field.target.manager)
-            else:
-                props[k] = v
-        # 全部能创建成功才能打包提交
-        item = self.manager.create(props, commit=True)
-        for manager in inlines:
-            manager.commit()
-
-        return item
-
-    create.request_schema = create.response_schema = Res("self")
+        return self.manager.create(properties, commit=True)
 
     @route.get(
         lambda r: f"/<{r.meta.id_converter}:id>",
         rel="self",
+        response_schema=Res("self"),
         attribute="instance",
     )
     def read(self, id):  # noqa
         return self.manager.read(id)
 
-    read.request_schema = None
-    read.response_schema = Res("self")
-
-    @read.put(rel="update")
+    @read.put(rel="update", schema=Res("self", True), response_schema=Res("self", True))
     def update(self, properties, id):  # noqa
         item = self.manager.read(id)
         updated_item = self.manager.update(item, properties)
         return updated_item
-
-    update.request_schema = Res("self", patchable=True)
-    update.response_schema = update.request_schema
 
     @update.delete(rel="destroy")
     def destroy(self, id):  # noqa
@@ -2477,32 +2445,32 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
             if op not in self.meta.allowed_operations:
                 raise OperationNotAllowed(f"{op} is not allowed")
             path = p.pop("path")  # 操作路径
-            if not self.path_exists(path):
+            if not self._path_exists(path):
                 raise InvalidUrl(f"{path} not found")
             value = p.pop("value", None)  # 可选参数值
-            func = getattr(self, op, None)
+            func = getattr(self, f"_{op}", None)
             if func is None:
                 raise OperationNotAllowed(f"{op} is allowed but not implemented")
             func(path, value)
         # 统一提交，中途报错则不会提交
         self.manager.commit()
-        return None, 200
+        return None
 
     @staticmethod
-    def is_root_path(path):
+    def _is_root_path(path):
         return path == "/"
 
     @staticmethod
-    def is_item_path(path):
+    def _is_item_path(path):
         return path[0] == "/" and path.strip("/").count("/") == 0
 
     @staticmethod
-    def is_attr_path(path):
+    def _is_attr_path(path):
         return path[0] == "/" and path.strip("/").count("/") == 1
 
-    def path_exists(self, path: str) -> bool:
+    def _path_exists(self, path: str) -> bool:
         """判断路径是否存在,目前只支持三级"""
-        if self.is_root_path(path):
+        if self._is_root_path(path):
             return True
         parts = path.rstrip("/").split("/")
 
@@ -2516,40 +2484,40 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
             return True
         return False
 
-    def add(self, path, value):
-        if self.is_root_path(path):
+    def _add(self, path, value):
+        if self._is_root_path(path):
             return self.manager.create(value, commit=False)
         raise InvalidUrl("add only support root path")
 
-    def replace(self, path, value):
-        if self.is_item_path(path):
+    def _replace(self, path, value):
+        if self._is_item_path(path):
             item = self.manager.read(path[1:])
             return self.manager.update(item, value, commit=False)
-        elif self.is_attr_path(path):
+        elif self._is_attr_path(path):
             id_, attr = path.strip("/").split("/")
             item = self.manager.read(id_)
             return self.manager.update(item, {attr: value}, commit=False)
         raise InvalidUrl("replace not support root path")
 
-    def remove(self, path, value=None):  # noqa keep the value for soft|elegant|hard delete
-        if self.is_item_path(path):
+    def _remove(self, path, value=None):  # noqa keep the value for soft|elegant|hard delete
+        if self._is_item_path(path):
             item = self.manager.read(path[1:])
             return self.manager.delete(item, commit=False)
         raise InvalidUrl("remove only support item path")
 
-    def move(self, path, value):
-        if self.is_item_path(path):
+    def _move(self, path, value):
+        if self._is_item_path(path):
             item = self.manager.read(path[1:])
             id_attribute = self.meta.id_attribute or "id"
-            if isinstance(value, str) and self.is_item_path(value) and not self.path_exists(value):
+            if isinstance(value, str) and self._is_item_path(value) and not self._path_exists(value):
                 return self.manager.update(item, {id_attribute: value[1:]}, commit=False)
             elif isinstance(value, dict):  # 可能有其他属性表示资源实体路径
                 return self.manager.update(item, value, commit=False)
             raise InvalidJSON("value must be path string or object")
         raise InvalidUrl("move only support item path")
 
-    def copy(self, path, value=None):
-        if self.is_item_path(path):
+    def _copy(self, path, value=None):
+        if self._is_item_path(path):
             item = self.manager.read(path[1:])
             props = vars(item)
             props.pop("id")
@@ -2559,9 +2527,9 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
             return self.manager.create(props, commit=False)  # copy
         raise InvalidUrl("copy only support item path")
 
-    def test(self, path, value):
+    def _test(self, path, value):
         # 此处的test实际上是测试路径对应的值是否与value相同
-        if self.is_attr_path(path):
+        if self._is_attr_path(path):
             id_, attr = path.strip("/").split("/")
             item = self.manager.read(id_)
             if not hasattr(item, attr):
@@ -2570,6 +2538,12 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
                 raise AssertionError(f"{path} does not match {value}")
             return None
         raise InvalidUrl("test only support attr path")
+
+    @classmethod
+    def faker(cls, io="r"):
+        if io == "r":
+            return {k: f.faker() for k, f in cls.schema.fields.items()}
+        return {k: f.faker() for k, f in cls.schema.fields.items() if f.io != "r"}
 
     class Schema:  # 设置各个字段的语法用的
         pass

@@ -22,7 +22,7 @@ from faker import Faker
 from flasgger import swag_from
 from flask import current_app, g, json, jsonify, make_response, request, url_for
 from flask.globals import app_ctx, request_ctx
-from flask_principal import ItemNeed, Permission, RoleNeed, UserNeed
+from flask_principal import Need, ItemNeed, Permission, RoleNeed, UserNeed
 from flask_sqlalchemy.pagination import Pagination as _Pagination
 from jsonschema import (
     Draft4Validator,
@@ -1719,7 +1719,7 @@ class route:  # noqa
         annotations = getattr(view_func, "__annotations__", None)  # 获取视图函数的注解
         if isinstance(annotations, dict) and annotations:
             self.request_schema = FieldSet(
-                {name: _init_field(field) for (name, field) in annotations.items() if name != "return"}
+                {name: _init_field(field) for (name, field) in annotations.items() if name not in ("return", "self")}
             )  # 请求的语法就是参数名和参数字段类型的字段集，响应也有字段
 
             self.response_schema = annotations.get("return", response_schema)
@@ -1856,6 +1856,19 @@ class route:  # noqa
             # 如果方法只有字符串和pass 就返回假数据
             if has_only_docstring(view_func) and response_schema is not None:
                 return _init_field(response_schema).faker()
+
+            # 如果用户没有路由所需权限则禁止访问
+            # print(view_func.__anotations__)
+            annotations = getattr(view_func, "__annotations__", None)
+            if annotations:
+                need = annotations.get('self', None)
+                print(need)
+                if isinstance(need, Need):
+                    permission = Permission(need)
+                    print(permission)
+                    print(g.identity.provides)
+                    if not permission.can():
+                        raise Forbidden()
 
             response = view_func(instance, *args, **kwargs)
 
@@ -3274,7 +3287,6 @@ class SQLAlchemyManager(Manager):
                 except KeyError:
                     raise BadRequest(f"Filter <{name}> is not allowed")
 
-
 # ----------------------------------------权限控制-------------------------------
 class _Need:  # 混合需求
     def __call__(self, item):
@@ -3432,6 +3444,69 @@ class _Permission(Permission):
                 return True
         return False
 
+# class iNeed:
+#     resource = None
+#
+#     def __init__(self, *args):
+#         self.needs = args
+#         needs_map = {}
+#
+#         def convert(method, needs, map, path=()):  # noqa
+#             options = set()  # 权限集合 Permission obj
+#             methods = needs_map.keys()
+#
+#             if isinstance(needs, str):  # 权限字符
+#                 needs = [needs]  # noqa 原来的needs可能是字符串和tuple
+#             if isinstance(needs, set):  # 权限集合直接返回
+#                 return needs
+#
+#             for need in needs:
+#                 if need in ("yes", "everyone", "anyone"):  # 全权
+#                     return {True}
+#                 if need in ("no", "nobody", "none"):  # 无权
+#                     options.add(Permission(("permission-denied",)))
+#                 elif need in methods:  # 如果权限也是 curd 词
+#                     if need in path:
+#                         raise RuntimeError(f"Circular permissions in {self.resource} (path: {path})")
+#                     if need == method:  # 和自身相同
+#                         options.add(_ItemNeed(method, self.resource))
+#                     else:
+#                         path += (method,)  # 用过的方法不可再用
+#                         options |= convert(need, map[need], map, path)  # 递归
+#
+#                 elif ":" in need:
+#                     role, value = need.split(":")
+#                     field = self.resource.schema.fields[value]
+#                     # schema中的字段
+#                     if field.attribute is None:
+#                         field.attribute = value
+#
+#                     if isinstance(field, Ref):  # 一对一的
+#                         target = field.target  # 目标
+#
+#                         if role == "user":  # user:attr
+#                             options.add(_UserNeed(field))
+#                         elif role == "role":  # role:xxx
+#                             options.add(RoleNeed(value))  # 需要用户的角色为xxx
+#                         else:  # 既不是user又不是role会是啥
+#                             for imported_need in target.manager.needs[role]:
+#                                 if isinstance(imported_need, _ItemNeed):
+#                                     imported_need = imported_need.extend(field)  # 目标集合增加当前字段
+#                                 options.add(imported_need)
+#
+#                     elif role == "user" and value in [
+#                         "$id",
+#                         "$uri",
+#                     ]:  # user:$id
+#                         options.add(_ItemNeed("id", self.resource))  # _ItemNeed 需要id与当前用户id相同
+#                 else:
+#                     options.add(RoleNeed(need))  # 角色
+#
+#             return options
+#
+#         # converted_needs = convert(method, needs, needs_map)
+#         # needs_map[method] = converted_needs
+#
 
 class _PrincipalMixin:  # 鉴权插件
     resource = None

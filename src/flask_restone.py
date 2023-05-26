@@ -2,6 +2,7 @@
 # 尽最大可能节约代码行数
 
 import ast
+import uuid
 import decimal
 import inspect
 import random
@@ -50,14 +51,7 @@ from werkzeug.wrappers import Response
 # ----------------------------------------通用常量-------------------------------
 
 
-HTTP_METHODS = (GET, PUT, POST, PATCH, DELETE, HEAD) = (
-    "GET",
-    "PUT",
-    "POST",
-    "PATCH",
-    "DELETE",
-    "HEAD",
-)
+(GET, PUT, POST, PATCH, DELETE, HEAD) = ("GET", "PUT", "POST", "PATCH", "DELETE", "HEAD")
 
 PAGE = "page"
 PER_PAGE = "per_page"
@@ -379,7 +373,7 @@ class Str(Field):
         if fmt and hasattr(_faker, fmt):
             return getattr(_faker, fmt)()
         elif fmt == "uuid":
-            return _faker.uuid4()
+            return uuid.uuid4()
         default = self.response.get("default", None)
         if default is not None:
             return default
@@ -1672,7 +1666,7 @@ _HTTP_VERBS = {
 
 
 def has_only_docstring(method):
-    """判断函数或方法是否只有 docstring，没有其他内容"""
+    """判断函数或方法是否只有 docstring or pass，没有其他内容"""
     # 获取函数/方法定义的源代码
     source_lines, _ = inspect.getsourcelines(method)
     leading_spaces = len(source_lines[0]) - len(source_lines[0].lstrip())
@@ -1683,18 +1677,14 @@ def has_only_docstring(method):
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # 如果函数/方法定义中只有一个表达式语句且表达式是字符串字面值，则函数/方法只包含 docstring
-            if (
-                len(node.body) == 1
-                and isinstance(node.body[0], ast.Expr)
-                and isinstance(node.body[0].value, ast.Str)  # noqa
-            ):
+            body = node.body
+            if len(body) == 1 and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Str):  # noqa
                 return True
             # 如果函数/方法定义中只有一个简单语句且是 pass，则函数/方法只包含 docstring
-            elif len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
+            if len(body) == 1 and isinstance(body[0], ast.Pass):
                 return True
             # 如果函数/方法定义中包含除了 docstring 或 pass 以外的其他内容，则函数/方法不止包含 docstring
-            else:
-                return False
+            return False
     # 如果函数/方法定义中没有任何内容，则认为它只包含 docstring
     return True
 
@@ -1739,7 +1729,7 @@ class route:  # noqa
 
         self.related_routes = ()  # 相关的路由
 
-        for method in HTTP_METHODS:  # 把方法绑定到类的实例中
+        for method in (GET, PUT, POST, PATCH, DELETE):  # 把方法绑定到类的实例中
             setattr(self, method.lower(), MethodType(_method_decorator(method), self))
 
     @property

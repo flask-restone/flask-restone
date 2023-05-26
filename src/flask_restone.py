@@ -35,15 +35,29 @@ from sqlalchemy.orm import aliased, class_mapper
 from sqlalchemy.orm.attributes import ScalarObjectAttributeImpl
 from sqlalchemy.orm.collections import InstrumentedList  # noqa
 from sqlalchemy.orm.exc import NoResultFound
-from werkzeug.exceptions import HTTPException
-from werkzeug.http import HTTP_STATUS_CODES
+from werkzeug.exceptions import (
+    HTTPException,
+    Forbidden,
+    UnsupportedMediaType,
+    NotFound,
+    BadRequest,
+    NotImplemented,
+    Conflict,
+)
 from werkzeug.utils import cached_property
 from werkzeug.wrappers import Response
 
 # ----------------------------------------通用常量-------------------------------
 
 
-HTTP_METHODS = (GET, PUT, POST, PATCH, DELETE, HEAD) = ("GET", "PUT", "POST", "PATCH", "DELETE", "HEAD")
+HTTP_METHODS = (GET, PUT, POST, PATCH, DELETE, HEAD) = (
+    "GET",
+    "PUT",
+    "POST",
+    "PATCH",
+    "DELETE",
+    "HEAD",
+)
 
 PAGE = "page"
 PER_PAGE = "per_page"
@@ -62,120 +76,6 @@ before_relate = _signals.signal("before-relate")
 after_relate = _signals.signal("after-relate")
 before_remove = _signals.signal("before-remove")
 after_remove = _signals.signal("after-remove")
-
-
-# ----------------------------------------异常处理-------------------------------
-class RestoneException(Exception):
-    status_code = 500
-
-    def as_dict(self):
-        if self.args:
-            message = str(self)
-        else:
-            message = HTTP_STATUS_CODES.get(self.status_code, "")
-        return dict(status=self.status_code, message=message)
-
-    def get_response(self):
-        response = jsonify(self.as_dict())
-        response.status_code = self.status_code
-        return response
-
-
-class ItemNotFound(RestoneException):
-    status_code = 404
-
-    def __init__(self, resource, where=None, id=None):  # noqa
-        self.resource = resource
-        self.id = id
-        self.where = where
-
-    def as_dict(self):
-        dct = super().as_dict()
-        if self.id is not None:
-            dct["item"] = {"$type": self.resource.meta.name, "$id": self.id}
-        else:
-            dct["item"] = {
-                "$type": self.resource.meta.name,
-                "$where": self.where,
-            }
-        return dct
-
-
-class RequestMustBeJSON(RestoneException):
-    status_code = 415
-
-
-class ValidationError(RestoneException):
-    status_code = 400
-
-    def __init__(self, errors, root=None, schema_uri="#"):
-        self.root = root
-        self.errors = errors
-        self.schema_uri = schema_uri
-
-    def _complete_path(self, error):
-        path = tuple(error.absolute_path)
-        if self.root is not None:
-            return (self.root,) + path
-        return path
-
-    def _format_errors(self):
-        for error in self.errors:
-            error_data = {
-                "validationOf": {error.validator: error.validator_value},
-                "path": self._complete_path(error),
-            }
-            if current_app.debug:
-                error_data["message"] = error.message
-            yield error_data
-
-    def as_dict(self):
-        dct = super().as_dict()
-        dct["errors"] = list(self._format_errors())
-        return dct
-
-
-class DuplicateKey(RestoneException):
-    status_code = 409
-
-    def __init__(self, **kwargs):
-        self.data = kwargs
-
-
-class BackendConflict(RestoneException):
-    status_code = 409
-
-    def __init__(self, **kwargs):
-        self.data = kwargs
-
-    def as_dict(self):
-        dct = super().as_dict()
-        dct.update(self.data)
-        return dct
-
-
-class PageNotFound(RestoneException):
-    status_code = 404
-
-
-class InvalidJSON(RestoneException):
-    status_code = 400
-
-
-class InvalidFilter(RestoneException):
-    status_code = 400
-
-
-class InvalidUrl(RestoneException):
-    status_code = 400
-
-
-class OperationNotAllowed(RestoneException):
-    status_code = 405
-
-
-class Forbidden(RestoneException):
-    status_code = 403
 
 
 # JSON _Schema，也称为JSON模式。JSON Schema是描述你的JSON数据格式；
@@ -236,13 +136,31 @@ class _Schema(ABC):
     def format(self, value):  # 格式化
         return value
 
+    @staticmethod
+    def _make_validation_error_response(errors):
+        error_list = []
+        for error in errors:
+            error_data = {
+                "validationOf": {error.validator: error.validator_value},
+                "path": tuple(error.absolute_path),
+            }
+            if current_app.debug:
+                error_data["message"] = error.message
+            error_list.append(error_data)
+        validation_error = {
+            "status": 400,
+            "message": "ValidationError",
+            "errors": error_list,
+        }
+        return make_response(validation_error, 400)
+
     def convert(self, instance, update=False):  # 实例检查
         validator = self._update_validator if update else self._validator  # 运用update的语法检查实例
         try:
             validator.validate(instance)  # 没报错就返回实例
         except _ValidationError:
             errors = validator.iter_errors(instance)  # 否则抛出验证错误
-            raise ValidationError(errors)
+            raise BadRequest(response=self._make_validation_error_response(errors))
         return instance
 
     def parse_request(self, request):  # noqa 解析请求并校验
@@ -1362,7 +1280,7 @@ class FieldSet(_Schema, _BindMixin):
         if request.method in (POST, PATCH, PUT, DELETE):
             if self.fields and request.mimetype != "application/json":
                 if not self.all_fields_optional:  # 并非所有字段都是选填 且 请求非json
-                    raise RequestMustBeJSON()
+                    raise UnsupportedMediaType()
         data = request.get_json(silent=True)
         if data is None and self.all_fields_optional:
             data = {}  # 没有数据且所有字段可选则可为空
@@ -1496,7 +1414,7 @@ class Instances(_PaginationMixin, _Schema, _BindMixin):
             else:
                 sort, where = self.parse_where_sort_by_args(request)
         except ValueError:
-            raise InvalidJSON()
+            raise BadRequest()
         result = {
             "page": page,
             "per_page": per_page,
@@ -1701,7 +1619,7 @@ def _route_from(url, method=None):
 
     parsed_url = urlsplit(url)
     if parsed_url.netloc not in ("", url_adapter.server_name):
-        raise PageNotFound()
+        raise NotFound()
     return url_adapter.match(parsed_url.path, method)
 
 
@@ -2430,9 +2348,9 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
         """
         根据 RFC 6902 规范执行指定路径下资源的操作。
         Raises:
-            OperationNotAllowed: 如果指定的操作不在允许的操作列表中，则引发此异常。
-            InvalidUrl: 如果指定的路径不存在，则引发此异常。
-            OperationNotAllowed: 如果指定的操作被允许但未实现，则引发此异常。
+            NotImplemented: 如果指定的操作不在允许的操作列表中，则引发此异常。
+            BadRequest: 如果指定的路径不存在，则引发此异常。
+            NotImplemented: 如果指定的操作被允许但未实现，则引发此异常。
             InvalidJSON: 如果参数值不是预期的格式，则引发此异常。
             AssertionError: 如果指定路径对应的值与参数值不匹配，则引发此异常。
         Returns:
@@ -2443,14 +2361,14 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
         for p in patch:
             op = p.pop("op")  # 可用操作
             if op not in self.meta.allowed_operations:
-                raise OperationNotAllowed(f"{op} is not allowed")
+                raise NotImplemented(f"{op} is not allowed")
             path = p.pop("path")  # 操作路径
             if not self._path_exists(path):
-                raise InvalidUrl(f"{path} not found")
+                raise BadRequest(f"{path} not found")
             value = p.pop("value", None)  # 可选参数值
             func = getattr(self, f"_{op}", None)
             if func is None:
-                raise OperationNotAllowed(f"{op} is allowed but not implemented")
+                raise NotImplemented(f"{op} is allowed but not implemented")
             func(path, value)
         # 统一提交，中途报错则不会提交
         self.manager.commit()
@@ -2476,7 +2394,7 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
 
         try:
             item = self.manager.read(parts[1])
-        except ItemNotFound:
+        except NotFound:
             return False
         if len(parts) == 2:
             return True
@@ -2487,7 +2405,7 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
     def _add(self, path, value):
         if self._is_root_path(path):
             return self.manager.create(value, commit=False)
-        raise InvalidUrl("add only support root path")
+        raise BadRequest("add only support root path")
 
     def _replace(self, path, value):
         if self._is_item_path(path):
@@ -2497,13 +2415,13 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
             id_, attr = path.strip("/").split("/")
             item = self.manager.read(id_)
             return self.manager.update(item, {attr: value}, commit=False)
-        raise InvalidUrl("replace not support root path")
+        raise BadRequest("replace not support root path")
 
     def _remove(self, path, value=None):  # noqa keep the value for soft|elegant|hard delete
         if self._is_item_path(path):
             item = self.manager.read(path[1:])
             return self.manager.delete(item, commit=False)
-        raise InvalidUrl("remove only support item path")
+        raise BadRequest("remove only support item path")
 
     def _move(self, path, value):
         if self._is_item_path(path):
@@ -2513,8 +2431,8 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
                 return self.manager.update(item, {id_attribute: value[1:]}, commit=False)
             elif isinstance(value, dict):  # 可能有其他属性表示资源实体路径
                 return self.manager.update(item, value, commit=False)
-            raise InvalidJSON("value must be path string or object")
-        raise InvalidUrl("move only support item path")
+            raise BadRequest("value must be path string or object")
+        raise BadRequest("move only support item path")
 
     def _copy(self, path, value=None):
         if self._is_item_path(path):
@@ -2525,7 +2443,7 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
             if isinstance(value, dict):
                 props.update(value)  # copy 并更新数据
             return self.manager.create(props, commit=False)  # copy
-        raise InvalidUrl("copy only support item path")
+        raise BadRequest("copy only support item path")
 
     def _test(self, path, value):
         # 此处的test实际上是测试路径对应的值是否与value相同
@@ -2533,11 +2451,11 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
             id_, attr = path.strip("/").split("/")
             item = self.manager.read(id_)
             if not hasattr(item, attr):
-                raise InvalidUrl(f"{path} not found")
+                raise BadRequest(f"{path} not found")
             if getattr(item, attr) != value:
                 raise AssertionError(f"{path} does not match {value}")
             return None
-        raise InvalidUrl("test only support attr path")
+        raise BadRequest("test only support attr path")
 
     @classmethod
     def faker(cls, io="r"):
@@ -2915,7 +2833,7 @@ class Manager:
         try:
             return self.instances(where, sort)[0]
         except IndexError:
-            raise ItemNotFound(self.resource, where=where)
+            raise NotFound(f"{self.resource.meta.name}, where={where}")
 
     def all(self, where=None, sort=None):
         pass
@@ -3109,7 +3027,7 @@ class SQLAlchemyManager(Manager):
         try:
             return query.filter(self.id_column == id).one()
         except NoResultFound:
-            raise ItemNotFound(self.resource, id=id)
+            raise NotFound()
 
     def _query_order_by(self, query, sort=None):
         order_clauses = []
@@ -3167,14 +3085,16 @@ class SQLAlchemyManager(Manager):
         except IntegrityError as e:
             session.rollback()
             if current_app.debug:
-                raise BackendConflict(
-                    debug_info=dict(
-                        exception_message=str(e),
-                        statement=e.statement,
-                        params=e.params,
+                raise Conflict(
+                    description=str(
+                        dict(
+                            exception_message=str(e),
+                            statement=e.statement,
+                            params=e.params,
+                        )
                     )
                 )
-            raise BackendConflict()
+            raise Conflict()
 
         after_create.send(self.resource, item=item)
         return item
@@ -3196,14 +3116,16 @@ class SQLAlchemyManager(Manager):
         except IntegrityError as e:
             session.rollback()
             if current_app.debug:
-                raise BackendConflict(
-                    debug_info=dict(
-                        exception_message=str(e),
-                        statement=e.statement,
-                        params=e.params,
+                raise Conflict(
+                    description=str(
+                        dict(
+                            exception_message=str(e),
+                            statement=e.statement,
+                            params=e.params,
+                        )
                     )
                 )
-            raise BackendConflict()
+            raise Conflict()
 
         after_update.send(self.resource, item=item, changes=actual_changes)
         return item
@@ -3220,14 +3142,16 @@ class SQLAlchemyManager(Manager):
             session.rollback()
 
             if current_app.debug:
-                raise BackendConflict(
-                    debug_info=dict(
-                        exception_message=str(e),
-                        statement=e.statement,
-                        params=e.params,
+                raise Conflict(
+                    description=str(
+                        dict(
+                            exception_message=str(e),
+                            statement=e.statement,
+                            params=e.params,
+                        )
                     )
                 )
-            raise BackendConflict()
+            raise Conflict()
 
         after_delete.send(self.resource, item=item)
 
@@ -3311,19 +3235,19 @@ class SQLAlchemyManager(Manager):
         try:
             return self._query_get_first(self.instances(where, sort))
         except IndexError:
-            raise ItemNotFound(self.resource, where=where)
+            raise NotFound()
 
     def read(self, id):  # noqa
         query = self._query()
         if query is None:
-            raise ItemNotFound(self.resource, id=id)
+            raise NotFound()
         return self._query_filter_by_id(query, id)
 
     def all(self, where=None, sort=None):
         try:
             return self._query_get_all(self.instances(where, sort))
         except IndexError:
-            raise ItemNotFound(self.resource, where=where)
+            raise NotFound()
 
     @staticmethod
     def convert_filters(value, field_filters):
@@ -3358,7 +3282,7 @@ class SQLAlchemyManager(Manager):
                 try:
                     yield self.convert_filters(value, self.filters[name])  # Condition条件实力
                 except KeyError:
-                    raise InvalidFilter(f"Filter <{name}> is not allowed")
+                    raise BadRequest(f"Filter <{name}> is not allowed")
 
 
 # ----------------------------------------权限控制-------------------------------
@@ -3903,12 +3827,10 @@ class Api:
         app.add_url_rule(rule, view_func=view_func, endpoint=endpoint, methods=methods)
 
     def _exception_handler(self, original_handler, e):
-        if isinstance(e, RestoneException):
-            return e.get_response()
         if not request.path.startswith(self.prefix):
             return original_handler(e)
         if isinstance(e, HTTPException):
-            return _make_response({"status": e.code, "message": e.description}, e.code)
+            return e.response or _make_response({"status": e.code, "message": e.description}, e.code)
         return original_handler(e)
 
     @staticmethod

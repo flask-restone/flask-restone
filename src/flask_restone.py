@@ -8,7 +8,7 @@ import inspect
 import random
 import re
 from abc import ABC, abstractmethod
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 from datetime import date, datetime, timezone
 from functools import partial, wraps
 from importlib import import_module
@@ -22,7 +22,7 @@ from faker import Faker
 from flasgger import swag_from
 from flask import current_app, g, json, jsonify, make_response, request, url_for
 from flask.globals import app_ctx, request_ctx
-from flask_principal import Need, ItemNeed, Permission, RoleNeed, UserNeed
+from flask_principal import Permission, RoleNeed,UserNeed,ItemNeed
 from flask_sqlalchemy.pagination import Pagination as _Pagination
 from jsonschema import (
     Draft4Validator,
@@ -927,6 +927,7 @@ class _ResourceRef:
         self.value = value
 
     def resolve(self, binding=None):
+        # print(ModelResource.__subclasses__())
         name = self.value
         if name == "self":  # 返回自己
             return binding
@@ -1689,6 +1690,7 @@ def has_only_docstring(method):
     return True
 
 
+
 class route:  # noqa
     def __init__(
         self,
@@ -1842,9 +1844,23 @@ class route:  # noqa
         return "".join((resource.route_prefix, rule))
 
     def view_factory(self, name, resource):  # 视图工厂
+        # 以下这些代码是在准备时执行，只会执行一次，不会
         request_schema = _bind(self.request_schema, resource)
         response_schema = _bind(self.response_schema, resource)
         view_func = self.view_func
+        annotations = getattr(view_func, "__annotations__")
+        # self 的注解作为路由级别的权限
+        
+        needs = annotations.get('self', None)
+        if needs and not isinstance(needs,need):
+            raise TypeError()
+        if needs:
+            _perms = needs._parse_perms(view_func)
+
+        else:
+            _perms = []
+        
+        not_implemented = has_only_docstring(view_func)
 
         def view(*args, **kwargs):
             instance = resource()  # 资源实例
@@ -1854,24 +1870,31 @@ class route:  # noqa
                 args += (request_schema.parse_request(request),)  # 为何是元组
 
             # 如果方法只有字符串和pass 就返回假数据
-            if has_only_docstring(view_func) and response_schema is not None:
-                return _init_field(response_schema).faker()
+            if not_implemented and response_schema is not None:
+                if current_app.debug:
+                    return _init_field(response_schema).faker()
+                else:
+                    raise NotImplemented
+            perms=[]
+            for kind, value in _perms:
+                if kind == 'u':
+                    perms.append(UserNeed(value))
+                elif kind == 'r':
+                    perms.append(RoleNeed(value))
+                elif kind == 'f':
+                    field = resource.schema.fields[value] # todo 移动至 view外面，不再访问时计算
+                    perms.append(_UserNeed(field))
 
-            # 如果用户没有路由所需权限则禁止访问
-            # print(view_func.__anotations__)
-            annotations = getattr(view_func, "__annotations__", None)
-            if annotations:
-                need = annotations.get('self', None)
-                print(need)
-                if isinstance(need, Need):
-                    permission = Permission(need)
-                    print(permission)
-                    print(g.identity.provides)
-                    if not permission.can():
-                        raise Forbidden()
-
-            response = view_func(instance, *args, **kwargs)
-
+            if perms:
+                permission = _Permission(*perms)
+            else:
+                permission = True
+                
+            if permission:
+                response = view_func(instance, *args, **kwargs)
+            else:
+                raise Forbidden
+            
             if not isinstance(response, tuple) and self.success_code:
                 response = (response, self.success_code)
             if response_schema is None or not self.format_response:
@@ -3287,6 +3310,18 @@ class SQLAlchemyManager(Manager):
                 except KeyError:
                     raise BadRequest(f"Filter <{name}> is not allowed")
 
+
+
+
+# ItemNeed = namedtuple('ItemNeed', ['method', 'value', 'type'])
+#
+# Need = partial(ItemNeed,type=None)
+#
+# UserNeed = partial(Need, method='id')
+#
+# RoleNeed = partial(Need, method='role')
+
+
 # ----------------------------------------权限控制-------------------------------
 class _Need:  # 混合需求
     def __call__(self, item):
@@ -3315,9 +3350,9 @@ class _ItemNeed(_Need):
 
     """
 
-    def __init__(self, method, resource, type_=None):
+    def __init__(self, method, resource, type=None):
         self.method = method
-        self.type = type_ or resource.meta.name
+        self.type = type or resource.meta.name
         self.resource = resource  # todo 改成引用
         self.fields = []
 
@@ -3333,16 +3368,13 @@ class _ItemNeed(_Need):
                     yield need[1]
 
     def extend(self, field):
-        return _RelationNeed(self.method, field)
+        return _FieldNeed(self.method, field)
 
     def __call__(self, item):
         if self.method == "id":
             return UserNeed(_getattr(self.resource.manager.id_attribute, item, None))
-        return ItemNeed(
-            self.method,
-            _getattr(self.resource.manager.id_attribute, item, None),
-            self.type,
-        )
+        
+        return ItemNeed(self.method,_getattr(self.resource.manager.id_attribute, item, None),self.type)
 
     def __eq__(self, other):
         return (
@@ -3356,18 +3388,14 @@ class _ItemNeed(_Need):
         return f"<_ItemNeed method='{self.method}' type='{self.type}'>"
 
 
-class _RelationNeed(_ItemNeed):
+class _FieldNeed(_ItemNeed):
     """
-    用于表示关系要求:
-        联系实际：你爸是局长，这就是一个关系的权限
-        翻译成代码就是：user.father.role: police
-        _RelationNeed('role','police','father')
-        更长的话：你爸爸的妈妈是老师
-        _RelationNeed('role','teacher','father','mother')
+    表示字段的需要
+    此类未被直接使用，而是使用其子类 _UserNeed
     """
 
     def __init__(self, method, *fields):
-        super().__init__(method, fields[-1].resource, fields[-1].target.meta.name)
+        super().__init__(method, fields[-1].resource,fields[-1].target.meta.name)
         self.fields = fields
         self.final_field = self.fields[-1]
 
@@ -3395,19 +3423,21 @@ class _RelationNeed(_ItemNeed):
         )
 
     def extend(self, field):
-        return _RelationNeed(self.method, field, *self.fields)
+        return _FieldNeed(self.method, field, *self.fields)
 
     def __repr__(self):
-        return f"<_RelationNeed method='{self.method}' type='{self.type}' {self.fields}>"
+        return f"<_FieldNeed method='{self.method}' type='{self.type}' {self.fields}>"
 
 
-class _UserNeed(_RelationNeed):
+class _UserNeed(_FieldNeed):
     def __init__(self, field):
         super().__init__("id", field)
 
     def __repr__(self):
         return f"<_UserNeed {self.type} {self.fields}>"
-
+    
+    def __hash__(self):  # 需要可以放到 set 里
+        return hash(self.__repr__())
 
 class _Permission(Permission):
     def __init__(self, *needs):
@@ -3444,69 +3474,87 @@ class _Permission(Permission):
                 return True
         return False
 
-# class iNeed:
-#     resource = None
-#
-#     def __init__(self, *args):
-#         self.needs = args
-#         needs_map = {}
-#
-#         def convert(method, needs, map, path=()):  # noqa
-#             options = set()  # 权限集合 Permission obj
-#             methods = needs_map.keys()
-#
-#             if isinstance(needs, str):  # 权限字符
-#                 needs = [needs]  # noqa 原来的needs可能是字符串和tuple
-#             if isinstance(needs, set):  # 权限集合直接返回
-#                 return needs
-#
-#             for need in needs:
-#                 if need in ("yes", "everyone", "anyone"):  # 全权
-#                     return {True}
-#                 if need in ("no", "nobody", "none"):  # 无权
-#                     options.add(Permission(("permission-denied",)))
-#                 elif need in methods:  # 如果权限也是 curd 词
-#                     if need in path:
-#                         raise RuntimeError(f"Circular permissions in {self.resource} (path: {path})")
-#                     if need == method:  # 和自身相同
-#                         options.add(_ItemNeed(method, self.resource))
-#                     else:
-#                         path += (method,)  # 用过的方法不可再用
-#                         options |= convert(need, map[need], map, path)  # 递归
-#
-#                 elif ":" in need:
-#                     role, value = need.split(":")
-#                     field = self.resource.schema.fields[value]
-#                     # schema中的字段
-#                     if field.attribute is None:
-#                         field.attribute = value
-#
-#                     if isinstance(field, Ref):  # 一对一的
-#                         target = field.target  # 目标
-#
-#                         if role == "user":  # user:attr
-#                             options.add(_UserNeed(field))
-#                         elif role == "role":  # role:xxx
-#                             options.add(RoleNeed(value))  # 需要用户的角色为xxx
-#                         else:  # 既不是user又不是role会是啥
-#                             for imported_need in target.manager.needs[role]:
-#                                 if isinstance(imported_need, _ItemNeed):
-#                                     imported_need = imported_need.extend(field)  # 目标集合增加当前字段
-#                                 options.add(imported_need)
-#
-#                     elif role == "user" and value in [
-#                         "$id",
-#                         "$uri",
-#                     ]:  # user:$id
-#                         options.add(_ItemNeed("id", self.resource))  # _ItemNeed 需要id与当前用户id相同
-#                 else:
-#                     options.add(RoleNeed(need))  # 角色
-#
-#             return options
-#
-#         # converted_needs = convert(method, needs, needs_map)
-#         # needs_map[method] = converted_needs
-#
+
+
+_need_map = {'u': 'user',
+             'r': 'role',
+             'f': 'form',
+             'b': 'base'}
+
+
+class need(_BindMixin):
+    """
+    权限的要求
+    1. r 字符串表示 role, 角色需要, 如 r"admin"
+    2. u 字符串表示 user, 用户需要, 如 u"author"
+    3. f 字符串表示 field, 关联字段需要 f"father.mother"
+    4. b 字符串(bytes)表示,
+    """
+    
+    def __init__(self, *args):
+        self.args = args
+    
+    def __call__(self, func):
+        """权限设置装饰器"""
+        permission = self._parse_permission(func)
+        
+        @wraps(func)
+        def wraper(*args, **kwargs):
+            if permission:
+                return func(*args, **kwargs)
+            else:
+                raise Forbidden()
+        
+        return wraper
+    
+    def _parse_permission(self, func):
+        """使用装饰器设置权限"""
+        perms = []
+        for kind,value in self._parse_perms(func):
+            if kind == 'u':
+                perms.append(UserNeed(value))
+            elif kind == 'r':
+                perms.append(RoleNeed(value))
+            # elif kind == 'f':
+            #     field = self.resource.schema.fields[value]
+            #     perms.append(_UserNeed(field))
+                
+        if perms:
+            permission = _Permission(*perms)
+        else:
+            permission = None
+        return permission
+
+    def _parse_perms(self, func):
+        perms = []
+        # source = (inspect.getsource(func))
+        source_lines, _ = inspect.getsourcelines(func)
+        leading_spaces = len(source_lines[0]) - len(source_lines[0].lstrip())
+        source = "".join(line[leading_spaces:] for line in source_lines)
+        print(source)
+        # print(source)
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and node.func.id == 'need':
+                for annotation in node.args:
+                    value = None
+                    kind = None
+                
+                    if isinstance(annotation, ast.Constant):
+                        value = annotation.value
+                        if isinstance(value, bytes):
+                            value = value.decode()
+                            kind = 'b'
+                        else:
+                            kind = annotation.kind or 'r'
+                
+                    elif isinstance(annotation, ast.JoinedStr):
+                        value = annotation.values[0].value
+                        kind = 'f'
+                    perms.append((kind, value))
+
+        return perms
+
 
 class _PrincipalMixin:  # 鉴权插件
     resource = None

@@ -1,18 +1,19 @@
-import random
-import time
-
+import ast
+import inspect
 # from celery import Celery
+from functools import wraps
+
 from flasgger import Swagger
 from flask import Flask, jsonify
-from flask_principal import RoleNeed, UserNeed, Permission, identity_loaded, Principal, Identity, AnonymousIdentity
-from flask_login import UserMixin, login_user, current_user, LoginManager
-
+from flask_login import LoginManager, UserMixin
+from flask_principal import (AnonymousIdentity, Identity, Permission, Principal,
+                             RoleNeed, UserNeed, identity_loaded)
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import backref
-from tqdm import tqdm
+from werkzeug.exceptions import Forbidden
 
-from src.flask_restone import (Api, Dict, Int, itemroute, ModelResource,
-                               Relation, Res, route, Str, TaskRoute, _UserNeed, Need)
+from src.flask_restone import (Api, Dict, Int, ModelResource, need, Relation,
+                               Res, Str, itemroute, need, route)
 
 app = Flask(__name__)
 # celery = Celery(app.name,
@@ -37,10 +38,10 @@ class Author(db.Model, UserMixin):
 class Book(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     author_id = db.Column(db.Integer, db.ForeignKey(Author.id), nullable=False)
-
+    
     title = db.Column(db.String(), nullable=False)
     year_published = db.Column(db.Integer)
-
+    
     author = db.relationship(Author, backref=backref('books'))
 
 
@@ -87,40 +88,46 @@ login_manager = LoginManager(app)
 
 class BookResource(ModelResource):
     # task = TaskRoute(long_task)
-
+    
     class Schema:
         author = Res("authors", io='r')
         title = Str
         year_published = Int
         author_id = Int(io='w')
-
+    
     class Meta:
         model = Book
         name = 'books'
         include_id = True
-
+    
     @itemroute.get
-    def year_published(self: UserNeed(1), item) -> Int():
+    def year_published(self: need(r'author',f'author'), item) -> Int():
         return item.year_published
-
+    
     @route.get("/person")
-    def person(self: Need[u'author', r'admin'],  # 路由权限注解
+    def person(self,  # 路由权限注解
                name: Str[1:5],  # 参数注解
                age: Int[0:100],
                gender: Str("M|F"),
                address: Dict(name=Str, city=Str, street=Int)):
         """文档由 docstring 自动生成"""
-
+        
         return jsonify(dict(name=name, age=age, gender=gender, address=address))
+
+
+# func = BookResource.year_published
+# print(func.__annotations__)
+
+
 
 
 class AuthorResource(ModelResource):
     books = Relation('books', uselist=True)
-
+    
     class Schema:
         first_name = Str
         last_name = Str
-
+    
     class Meta:
         model = Author
         name = 'authors'

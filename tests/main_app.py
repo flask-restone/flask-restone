@@ -10,6 +10,54 @@ db = SQLAlchemy(app)
 
 Swagger(app)
 
+_need_map = {'u': 'id', 'r': 'role', 'f': 'action', 'b': 'type'}
+
+
+class need:
+    
+    def __init__(self, *args):
+        self.args = args
+    
+    def __call__(self, func):
+        """权限设置"""
+        perms = []
+        source = (inspect.getsource(func))
+        tree = ast.parse(source)
+        for node in tree.body[0].decorator_list:
+            if isinstance(node, ast.Call) and node.func.id == 'need':
+                for annotation in node.args:
+                    value = None
+                    kind = None
+                    
+                    if isinstance(annotation, ast.Constant):
+                        value = annotation.value
+                        if isinstance(value, bytes):
+                            value = value.decode()
+                            kind = 'b'
+                        else:
+                            kind = annotation.kind or 'r'
+                    
+                    elif isinstance(annotation, ast.JoinedStr):
+                        value = annotation.values[0].value
+                        kind = 'f'
+                    
+                    if kind:
+                        perms.append(Need(_need_map[kind], value))
+                break
+        if perms:
+            permission = Permission(*perms)
+        else:
+            permission = None
+        
+        @wraps(func)
+        def wraper(*args, **kwargs):
+            if permission:
+                return func(*args, **kwargs)
+            else:
+                raise PermissionError
+        
+        return wraper
+
 
 class Human(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -40,6 +88,7 @@ class HumanResource(ModelResource):
         """查询总量"""
 
     @itemroute.get
+    @need
     def gender(self, item) -> Str['M|F']:
         """查询性别"""
 

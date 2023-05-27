@@ -104,7 +104,7 @@ class BookResource(ModelResource):
     def year_published(self: need(r'author',f'author'), item) -> Int():
         return item.year_published
     
-    @route.get("/person")
+    @route.post("/person")
     def person(self,  # 路由权限注解
                name: Str[1:5],  # 参数注解
                age: Int[0:100],
@@ -157,8 +157,7 @@ def load_user():
 Swagger(app)
 
 api = Api(prefix="/v1")
-api.add_resource(BookResource)
-api.add_resource(AuthorResource)
+api.add_resources(BookResource,AuthorResource)
 
 api.init_app(app)
 

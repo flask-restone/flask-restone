@@ -47,7 +47,7 @@ from werkzeug.exceptions import (
 )
 from werkzeug.utils import cached_property
 from werkzeug.wrappers import Response
-
+from loguru import logger
 # ----------------------------------------通用常量-------------------------------
 
 
@@ -1855,40 +1855,39 @@ class route:  # noqa
         if needs and not isinstance(needs,need):
             raise TypeError()
         if needs:
-            _perms = needs._parse_perms(view_func)
+            perms = []
+            for kind, value in needs._parse_perms(view_func):
+                if kind == 'u':
+                    perms.append(UserNeed(value))
+                elif kind == 'r':
+                    perms.append(RoleNeed(value))
+                elif kind == 'f':
+                    field = resource.schema.fields[value]  # todo 移动至 view外面，不再访问时计算
+                    perms.append(_UserNeed(field))
 
+            if perms:
+                permission = _Permission(*perms)
+                logger.info('This Permission only run once')
         else:
-            _perms = []
-        
+            permission = True
         not_implemented = has_only_docstring(view_func)
-
+        if not_implemented:
+            logger.warning(f'{self} is not implemented')
+            
         def view(*args, **kwargs):
             instance = resource()  # 资源实例
             if isinstance(request_schema, (FieldSet, Instances)):  # 请求字段集和实例集
                 kwargs.update(request_schema.parse_request(request))  # 上文实现了
             elif isinstance(request_schema, _Schema):  # 普通的格式
                 args += (request_schema.parse_request(request),)  # 为何是元组
-
+            logger.info(f'request args {args},kwargs {kwargs}')
             # 如果方法只有字符串和pass 就返回假数据
             if not_implemented and response_schema is not None:
                 if current_app.debug:
                     return _init_field(response_schema).faker()
                 else:
                     raise NotImplemented
-            perms=[]
-            for kind, value in _perms:
-                if kind == 'u':
-                    perms.append(UserNeed(value))
-                elif kind == 'r':
-                    perms.append(RoleNeed(value))
-                elif kind == 'f':
-                    field = resource.schema.fields[value] # todo 移动至 view外面，不再访问时计算
-                    perms.append(_UserNeed(field))
-
-            if perms:
-                permission = _Permission(*perms)
-            else:
-                permission = True
+            
                 
             if permission:
                 response = view_func(instance, *args, **kwargs)
@@ -3988,20 +3987,7 @@ class Api:
             self.views.append((route, resource, view_func, endpoint, methods, route.relation))
 
     def add_resource(self, resource):
-        if resource in self.resources.values():
-            return
-        if resource.api is not None and resource.api != self:
-            raise RuntimeError("Attempted to register a resource that is already registered with a different Api.")
-        if issubclass(resource, ModelResource) and resource.manager is None:
-            if self.default_manager:
-                resource.manager = self.default_manager(resource, resource.meta.get("model"))
-            else:
-                raise RuntimeError(
-                    f"'{resource.meta.name}' has no manager, and no default manager has been defined. "
-                    f"If you're using Restone with SQLAlchemy, ensure you have installed Flask-SQLAlchemy."
-                )
-        resource.api = self
-        resource.route_prefix = "".join((self.prefix, "/", resource.meta.name))
+        """有的资源依赖其他资源，依次添加并且编译会出现资源找不到的情况,为了解这个问题应当先创建一个资源池"""
         for rt in resource.routes.values():
             route_decorator = resource.meta.route_decorators.get(rt.relation, None)
             # route.relation 是字符 如"read_xxx" 则是 装饰器字典，用于装饰这个函数
@@ -4016,4 +4002,26 @@ class Api:
                     rt.attribute = f"{route_set.attribute}_{i}"
                 resource.routes[f"{route_set.attribute}_{rt.relation}"] = rt
                 self.add_route(rt, resource)
-        self.resources[resource.meta.name] = resource
+
+    def add_resources(self,*resource_list):
+        """先把资源统一添加到资源池"""
+        for resource in resource_list:
+            if resource.meta.name in self.resources:
+                continue
+            if resource.api is not None and resource.api != self:
+                raise RuntimeError("Attempted to register a resource that is already registered with a different Api.")
+            if issubclass(resource, ModelResource) and resource.manager is None:
+                if self.default_manager:
+                    resource.manager = self.default_manager(resource,
+                                                            resource.meta.model)
+                else:
+                    raise RuntimeError(
+                        f"'{resource.meta.name}' has no manager, and no default manager has been defined. "
+                        f"If you're using Restone with SQLAlchemy, ensure you have installed Flask-SQLAlchemy."
+                    )
+            resource.api = self
+            resource.route_prefix = "".join((self.prefix, "/", resource.meta.name))
+            self.resources[resource.meta.name] = resource
+            
+        for resource in resource_list:
+            self.add_resource(resource)

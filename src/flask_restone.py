@@ -1915,6 +1915,7 @@ class route:  # noqa
             permission = needs._parse_permission(view_func, resource)
         else:
             permission = True
+
         not_implemented = has_only_docstring(view_func)
         if not_implemented:
             logger.warning(f"{self} is not implemented")
@@ -1933,7 +1934,7 @@ class route:  # noqa
                 else:
                     raise NotImplemented
             
-            if permission:
+            if permission is True or permission.can(args[0]): # todo
                 response = view_func(instance, *args, **kwargs)
             else:
                 raise Forbidden
@@ -1972,11 +1973,9 @@ class itemroute(route):  # noqa
     
     def view_factory(self, name, resource):
         original_view = super().view_factory(name, resource)
-        
         def view(*args, **kwargs):
             item = resource.manager.read(kwargs.pop("id"))
             return original_view(item, *args, **kwargs)
-        
         return view
 
 
@@ -2399,8 +2398,7 @@ class ModelResource(Resource, metaclass=_ModelResourceMeta):
     def instances(self, **kwargs):
         return self.manager.paginated_instances(**kwargs)
     
-    @instances.post(rel="create", schema=Res("self"),
-                    response_schema=Res("self"))  # 明白了rel是内部用的用于定位视图的，作为key
+    @instances.post(rel="create", schema=Res("self"),response_schema=Res("self"))  # 明白了rel是内部用的用于定位视图的，作为key
     def create(self, properties):
         return self.manager.create(properties, commit=True)
     
@@ -3407,10 +3405,6 @@ class SQLAlchemyManager(Manager):
                 except KeyError:
                     raise BadRequest(f"Filter <{name}> is not allowed")
 
-
-_need_map = {"u": "user", "r": "role", "f": "form", "b": "base"}
-
-
 class Need(tuple):
     """
     权限的要求
@@ -3442,8 +3436,8 @@ class Need(tuple):
                 perms.append(RoleNeed(value))
             elif kind == 'f' and resource:
                 field = resource.schema.fields[value]  # todo this should be in _UserNeed
-                perms.append(_UserNeed(field))
-        
+                perms.append(FieldNeed('id', field))
+            logger.debug(perms)
         if perms:
             permission = _Permission(*perms)
         else:
@@ -3484,22 +3478,17 @@ UserNeed = partial(Need, 'id')
 RoleNeed = partial(Need, 'role')
 
 
-class _AbstractNeed:  # 混合需求
-
-    def __call__(self, item):
-        raise NotImplementedError
+class ItemNeed:
+    """
+    ItemNeed('create','books')(None) == Need('create',None,'books')
+    ItemNeed('read','books')(None) == Need('read',None,'books')
+    ItemNeed('update','books')(Book(1)) == Need('update',1,'books')
+    ItemNeed('delete','books')(Book(1)) == Need('delete',1,'books')
     
-    def __hash__(self):  # 需要可以放到 set 里
-        return hash(self.__repr__())
-    
-    def load_needs_from_identity(self):
-        return None
-
-
-class _BaseNeed(_AbstractNeed):
-    
+    """
     def __init__(self, method, resource, type=None):
         self.method = method
+        
         self.type = type or resource.meta.name
         self.resource = resource  # todo 改成引用
         self.fields = []
@@ -3516,7 +3505,7 @@ class _BaseNeed(_AbstractNeed):
                     yield need[1]
     
     def extend(self, field):
-        return _FieldNeed(self.method, field)
+        return FieldNeed(self.method, field)
     
     def __call__(self, item):
         if self.method == "id":
@@ -3526,20 +3515,20 @@ class _BaseNeed(_AbstractNeed):
     
     def __eq__(self, other):
         return (
-                isinstance(other, _BaseNeed)
+                isinstance(other, ItemNeed)
                 and self.method == other.method
                 and self.type == other.type
                 and self.resource == other.resource
         )
     
     def __repr__(self):
-        return f"<_BaseNeed method='{self.method}' type='{self.type}'>"
+        return f"<ItemNeed method='{self.method}' type='{self.type}'>"
 
 
-class _FieldNeed(_BaseNeed):
+class FieldNeed(ItemNeed):
     """
     表示字段的需要
-    此类未被直接使用，而是使用其子类 _UserNeed
+    此类未被直接使用，而是使用其子类
     """
     
     def __init__(self, method, *fields):
@@ -3554,10 +3543,10 @@ class _FieldNeed(_BaseNeed):
             return Need(self.method, None, self.type)
         
         for field in self.fields:
+            logger.debug(field)
             item = getattr(item, field.attribute)
         
-        item_id = getattr(item, self.final_field.resource.manager.id_attribute,
-                          None)
+        item_id = getattr(item, self.final_field.resource.manager.id_attribute, None)
         
         if self.method == "id":
             return UserNeed(item_id)
@@ -3565,27 +3554,19 @@ class _FieldNeed(_BaseNeed):
     
     def __eq__(self, other):
         return (
-                isinstance(other, _BaseNeed)
+                isinstance(other, ItemNeed)
                 and self.method == other.method
                 and self.resource == other.resource
                 and self.fields == other.fields
         )
     
     def extend(self, field):
-        return _FieldNeed(self.method, field, *self.fields)
+        return FieldNeed(self.method, field, *self.fields)
     
     def __repr__(self):
-        return f"<_FieldNeed method='{self.method}' type='{self.type}' {self.fields}>"
-
-
-class _UserNeed(_FieldNeed):
-    def __init__(self, field):
-        super().__init__("id", field)
+        return f"<FieldNeed method='{self.method}' type='{self.type}' {self.fields}>"
     
-    def __repr__(self):
-        return f"<_UserNeed {self.type} {self.fields}>"
-    
-    def __hash__(self):  # 需要可以放到 set 里
+    def __hash__(self):
         return hash(self.__repr__())
 
 
@@ -3596,7 +3577,7 @@ class _Permission(Permission):
         self.standard_needs = set()
         
         for need in needs:
-            if isinstance(need, _AbstractNeed):
+            if isinstance(need, ItemNeed):
                 self.needs.add(need)
             else:
                 self.standard_needs.add(need)
@@ -3627,8 +3608,6 @@ class _Permission(Permission):
 
 
 
-
-
 class _PrincipalMixin:  # 鉴权插件
     resource = None
     
@@ -3651,12 +3630,12 @@ class _PrincipalMixin:  # 鉴权插件
         - {'create':'yes'} --> {'create':{True}}
         - {'create':'no'} --> {'create':{Permission(("permission-denied",)),}}
         - {'update':'create'}
-        - {'create':'create'}-->{'create':{_BaseNeed('create',ModelResource)}}
-        - {'create':'user:father'} -->{'create':{_UserNeed('father')}}
+        - {'create':'create'}-->{'create':{ItemNeed('create',ModelResource)}}
+        - {'create':'user:father'} -->{'create':{FieldNeed('id','father')}}
         - {'create':'role:father'} -->{'create':{RoleNeed('father')}}
         - {'create':'create:father'} -->{'create':{RoleNeed('father')}}
         - {'create':'admin'} -->{'create':{RoleNeed('admin')}}
-        - {'create':'user:$id'} -->{'create':{_BaseNeed('id',HumanResource)}}
+        - {'create':'user:$id'} -->{'create':{ItemNeed('id',HumanResource)}}
         :return:
         :rtype:
         """
@@ -3681,7 +3660,7 @@ class _PrincipalMixin:  # 鉴权插件
                         raise RuntimeError(
                             f"Circular permissions in {self.resource} (path: {path})")
                     if need == method:  # 和自身相同
-                        options.add(_BaseNeed(method, self.resource))
+                        options.add(ItemNeed(method, self.resource))
                     else:
                         path += (method,)  # 用过的方法不可再用
                         options |= convert(need, map[need], map, path)  # 递归
@@ -3697,12 +3676,12 @@ class _PrincipalMixin:  # 鉴权插件
                         target = field.target  # 目标
                         
                         if role == "user":  # user:attr
-                            options.add(_UserNeed(field))
+                            options.add(FieldNeed('id', field))
                         elif role == "role":  # role:xxx
                             options.add(RoleNeed(value))  # 需要用户的角色为xxx
                         else:  # 既不是user又不是role会是啥
                             for imported_need in target.manager.needs[role]:
-                                if isinstance(imported_need, _BaseNeed):
+                                if isinstance(imported_need, ItemNeed):
                                     imported_need = imported_need.extend(
                                         field)  # 目标集合增加当前字段
                                 options.add(imported_need)
@@ -3711,8 +3690,7 @@ class _PrincipalMixin:  # 鉴权插件
                         "$id",
                         "$uri",
                     ]:  # user:$id
-                        options.add(_BaseNeed("id",
-                                              self.resource))  # _BaseNeed 需要id与当前用户id相同
+                        options.add(ItemNeed("id",self.resource))  # ItemNeed 需要id与当前用户id相同
                 else:
                     options.add(RoleNeed(need))  # 角色
             

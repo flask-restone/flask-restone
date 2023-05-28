@@ -1,19 +1,15 @@
-import ast
-import inspect
-# from celery import Celery
-from functools import wraps
+# pylint:skipfile
 
 from flasgger import Swagger
 from flask import Flask, jsonify
 from flask_login import LoginManager, UserMixin
-from flask_principal import (AnonymousIdentity, Identity, Permission, Principal,
-                             RoleNeed, UserNeed, identity_loaded)
+from flask_principal import (AnonymousIdentity, Identity, Permission, Principal,identity_loaded)
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import backref
 from werkzeug.exceptions import Forbidden
 
-from src.flask_restone import (Api, Dict, Int, ModelResource, need, Relation,
-                               Res, Str, itemroute, need, route)
+from src.flask_restone import (Api, Dict, Int, ModelResource, Need, Relation,
+                               Res, Str, itemroute, route,RoleNeed, UserNeed)
 
 app = Flask(__name__)
 # celery = Celery(app.name,
@@ -90,7 +86,7 @@ class BookResource(ModelResource):
     # task = TaskRoute(long_task)
     
     class Schema:
-        author = Res("authors", io='r')
+        author = Res("authors", io='r',attribute='author')
         title = Str
         year_published = Int
         author_id = Int(io='w')
@@ -101,20 +97,22 @@ class BookResource(ModelResource):
         include_id = True
     
     @itemroute.get
-    def year_published(self: need(r'author',f'author'), item) -> Int():
+    def year_published(self: Need[f'author',],
+                       item) -> Int():
         return item.year_published
     
     @route.post("/person")
     def person(self,  # 路由权限注解
                name: Str[1:5],  # 参数注解
                age: Int[0:100],
-               gender: Str("M|F"),
+               gender: Str["M|F"],
                address: Dict(name=Str, city=Str, street=Int)):
         """文档由 docstring 自动生成"""
         
         return jsonify(dict(name=name, age=age, gender=gender, address=address))
 
 
+# var = Need[r'admin', f'father']
 # func = BookResource.year_published
 # print(func.__annotations__)
 
@@ -146,7 +144,7 @@ def read_identity_from_flask_login():
 def on_identity_loaded(sender, identity):
     if not isinstance(identity, AnonymousIdentity):
         identity.provides.add(UserNeed(identity.id))
-        identity.provides.add(RoleNeed('author'))
+        identity.provides.add(RoleNeed('editor'))
 
 
 @login_manager.user_loader

@@ -153,8 +153,15 @@ def load_user():
 
 api = Api(prefix="/v1")
 api.add_resources(BookResource,AuthorResource)
-
 api.init_app(app)
+
+# @api.indentity_loader
+# def read_identity_from_flask_login():
+#     return Identity(1)
+#
+# @api.identity_loaded
+# def on_identity_loaded(sender, identity):
+#     pass
 
 if __name__ == '__main__':
     # login_user(Author.query.get_id(1))

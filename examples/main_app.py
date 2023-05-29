@@ -1,15 +1,14 @@
 # pylint:skipfile
 
-from flasgger import Swagger
 from flask import Flask, jsonify
 from flask_login import LoginManager, UserMixin
-from flask_principal import (AnonymousIdentity, Identity, Permission, Principal,identity_loaded)
+from flask_principal import (AnonymousIdentity, Identity, Principal,
+                             identity_loaded)
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import backref
-from werkzeug.exceptions import Forbidden
 
 from src.flask_restone import (Api, Dict, Int, ModelResource, Need, Relation,
-                               Res, Str, itemroute, route,RoleNeed, UserNeed)
+                               Res, RoleNeed, Str, UserNeed, itemroute, route)
 
 app = Flask(__name__)
 # celery = Celery(app.name,
@@ -151,8 +150,6 @@ def on_identity_loaded(sender, identity):
 def load_user():
     return Author.query.get(1)
 
-
-Swagger(app)
 
 api = Api(prefix="/v1")
 api.add_resources(BookResource,AuthorResource)

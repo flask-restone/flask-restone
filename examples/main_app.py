@@ -97,7 +97,7 @@ class BookResource(ModelResource):
         include_id = True
     
     @itemroute.get
-    def year_published(self: Need[f'author',],
+    def year_published(self: Need[f'author'],
                        item) -> Int():
         return item.year_published
     

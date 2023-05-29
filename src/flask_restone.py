@@ -3455,22 +3455,22 @@ class Need(tuple):
         source = "".join(line[leading_spaces:] for line in source_lines)
         tree = ast.parse(source)
         for node in ast.walk(tree):
-            if isinstance(node,
-                          ast.Subscript) and node.value.id == cls.__name__:
-                for annotation in node.slice.elts:
+            if isinstance(node, ast.Subscript) and node.value.id == cls.__name__:
+                logger.warning(ast.dump(node))
+                for one in getattr(node.slice, 'elts', [node.slice]):
                     value = None
                     kind = None
 
-                    if isinstance(annotation, ast.Constant):
-                        value = annotation.value
+                    if isinstance(one, ast.Constant):
+                        value = one.value
                         if isinstance(value, bytes):
                             value = value.decode()
                             kind = "b"
                         else:
-                            kind = annotation.kind or "r"
+                            kind = one.kind or "r"
 
-                    elif isinstance(annotation, ast.JoinedStr):
-                        value = annotation.values[0].value
+                    elif isinstance(one, ast.JoinedStr):
+                        value = one.values[0].value
                         kind = "f"
                     perms.append((kind, value))
 

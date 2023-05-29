@@ -22,7 +22,7 @@ from faker import Faker
 from flasgger import swag_from
 from flask import current_app, g, json, jsonify, make_response, request, url_for
 from flask.globals import app_ctx, request_ctx
-from flask_principal import Permission
+from flask_principal import Permission as _Permission
 from flask_sqlalchemy.pagination import Pagination as _Pagination
 from jsonschema import (
     Draft4Validator,
@@ -3444,7 +3444,7 @@ class Need(tuple):
 
             logger.debug(perms)
         if perms:
-            permission = _Permission(*perms)
+            permission = Permission(*perms)
         else:
             permission = True
         return permission
@@ -3483,13 +3483,10 @@ UserNeed = partial(Need, 'id')
 RoleNeed = partial(Need, 'role')
 ByteNeed = partial(Need, 'byte')
 
-
 """
 字节需求
 ByteNeed('secret_key'),用于校验用户的字节令牌，即请求中的token
 """
-
-
 class ItemNeed:
     """
     ItemNeed('create','books')(None) == Need('create',None,'books')
@@ -3589,7 +3586,7 @@ class FieldNeed(ItemNeed):
         return hash(self.__repr__())
 
 
-class _Permission(Permission):
+class Permission(_Permission):
     def __init__(self, *needs):
         super().__init__(*needs)
         self.needs = set()
@@ -3672,7 +3669,7 @@ class _PrincipalMixin:  # 鉴权插件
                 if need in ("yes", "everyone", "anyone"):  # 全权
                     return {True}
                 if need in ("no", "nobody", "none"):  # 无权
-                    options.add(Permission(("permission-denied",)))
+                    options.add(_Permission(("permission-denied",)))
                 elif need in methods:  # 如果权限也是 curd 词
                     if need in path:
                         raise RuntimeError(
@@ -3723,7 +3720,7 @@ class _PrincipalMixin:  # 鉴权插件
         for method, needs in self._needs.items():
             if True in needs:  # noqa
                 needs = set()
-            permissions[method] = _Permission(*needs)
+            permissions[method] = Permission(*needs)
 
         return permissions
 

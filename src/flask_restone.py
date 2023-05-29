@@ -3438,8 +3438,10 @@ class Need(tuple):
             elif kind == "r":
                 perms.append(RoleNeed(value))
             elif kind == 'f' and resource:
-                # field = resource.schema.fields[value]  # todo this should be in _UserNeed
                 perms.append(FieldNeed('id', value, resource))
+            elif kind == 'b':  # Need[b'123456']
+                perms.append(ByteNeed(value))
+
             logger.debug(perms)
         if perms:
             permission = _Permission(*perms)
@@ -3479,6 +3481,13 @@ class Need(tuple):
 
 UserNeed = partial(Need, 'id')
 RoleNeed = partial(Need, 'role')
+ByteNeed = partial(Need, 'byte')
+
+
+"""
+字节需求
+ByteNeed('secret_key'),用于校验用户的字节令牌，即请求中的token
+"""
 
 
 class ItemNeed:

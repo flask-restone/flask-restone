@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flask_restone"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
   { name="Arry Lee", email="arry_lee@qq.com" },
 ]
-description = "Restone make you the rest one"
+description = "All in one framework for creating RESTful APIs"
 readme = "README.md"
 requires-python = ">=3.5"
 classifiers = [
@@ -18,5 +18,7 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/arry-lee/flask-restone"
-"Bug Tracker" = "https://github.com/arry-lee/flask-restone/issues"
+"Homepage" = "https://github.com/flask-restone/flask-restone"
+"Bug Tracker" = "https://github.com/flask-restone/flask-restone/issues"
+# py -m build
+# py -m twine upload dist/*

@@ -1,0 +1,246 @@
+
+<!DOCTYPE html>
+
+<html lang="EN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>Advanced Recipes &#8212; Flask-Restone 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/flasky.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Permissions with Flask-Principal" href="permissions.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head><body>
+  
+  
+
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="permissions.html" title="Permissions with Flask-Principal"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Flask-Restone 0.1.0 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Advanced Recipes</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="advanced-recipes">
+<h1>Advanced Recipes<a class="headerlink" href="#advanced-recipes" title="Permalink to this heading">¶</a></h1>
+<section id="historymixin">
+<h2>HistoryMixin<a class="headerlink" href="#historymixin" title="Permalink to this heading">¶</a></h2>
+<p>This mixin keeps a simple history of changes that have been made to a resource, storing them in a database table with a JSON field.
+<code class="xref py py-class docutils literal notranslate"><span class="pre">HistoryMixin</span></code> is a drop-in addition to any <code class="xref py py-class docutils literal notranslate"><span class="pre">ModelResource</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">ChangeSet</span> <span class="o">=</span> <span class="n">Dict</span><span class="p">(</span><span class="n">updated_at</span><span class="o">=</span><span class="n">DateTime</span><span class="p">,</span><span class="n">changes</span><span class="o">=</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">(</span><span class="n">attribute</span><span class="o">=</span><span class="n">Str</span><span class="p">,</span><span class="n">old</span><span class="o">=</span><span class="n">Any</span><span class="p">,</span><span class="n">new</span><span class="o">=</span><span class="n">Any</span><span class="p">)])</span>
+
+
+<span class="k">class</span> <span class="nc">HistoryRecord</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Model</span><span class="p">):</span>
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">object_type</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">object_id</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">updated_at</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">DateTime</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">changes</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">postgresql</span><span class="o">.</span><span class="n">JSONB</span><span class="p">)</span>
+
+    <span class="n">__mapper_args__</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;order_by&quot;</span><span class="p">:</span> <span class="s2">&quot;updated_at&quot;</span>
+    <span class="p">}</span>
+
+
+<span class="k">class</span> <span class="nc">HistoryMixin</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="nd">@itemroute</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/history&#39;</span><span class="p">,</span> <span class="n">rel</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span><span class="n">ChangeSet</span><span class="p">):</span>
+        <span class="n">history</span> <span class="o">=</span> <span class="n">HistoryRecord</span><span class="o">.</span><span class="n">query</span> \
+            <span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="n">object_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">__tablename__</span><span class="p">,</span>
+                       <span class="n">object_id</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;id_attribute&#39;</span><span class="p">,</span> <span class="s1">&#39;id&#39;</span><span class="p">)))</span> \
+            <span class="o">.</span><span class="n">all</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">history</span>
+
+
+<span class="nd">@before_update</span><span class="o">.</span><span class="n">connect_via</span><span class="p">(</span><span class="n">ANY</span><span class="p">,</span> <span class="n">weak</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">history_on_update</span><span class="p">(</span><span class="n">resource</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">changes</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">resource</span><span class="p">,</span> <span class="n">HistoryMixin</span><span class="p">):</span>
+        <span class="n">history</span> <span class="o">=</span> <span class="n">HistoryRecord</span><span class="p">(</span><span class="n">object_type</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">__tablename__</span><span class="p">,</span>
+                                <span class="n">object_id</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">resource</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;id_attribute&#39;</span><span class="p">,</span> <span class="s1">&#39;id&#39;</span><span class="p">)),</span>
+                                <span class="n">changes</span><span class="o">=</span><span class="p">[])</span>
+
+        <span class="n">fields_by_attribute</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">field</span><span class="o">.</span><span class="n">attribute</span> <span class="ow">or</span> <span class="n">key</span><span class="p">:</span> <span class="n">field</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">resource</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">fields</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+
+        <span class="k">for</span> <span class="n">attribute</span><span class="p">,</span> <span class="n">change</span> <span class="ow">in</span> <span class="n">changes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">field</span> <span class="o">=</span> <span class="n">fields_by_attribute</span><span class="p">[</span><span class="n">attribute</span><span class="p">]</span>
+            <span class="n">history</span><span class="o">.</span><span class="n">changes</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="s2">&quot;attribute&quot;</span><span class="p">:</span> <span class="n">attribute</span><span class="p">,</span>
+                <span class="s2">&quot;old&quot;</span><span class="p">:</span> <span class="n">field</span><span class="o">.</span><span class="n">output</span><span class="p">(</span><span class="n">attribute</span><span class="p">,</span> <span class="n">item</span><span class="p">),</span>
+                <span class="s2">&quot;new&quot;</span><span class="p">:</span> <span class="n">field</span><span class="o">.</span><span class="n">output</span><span class="p">(</span><span class="n">attribute</span><span class="p">,</span> <span class="n">changes</span><span class="p">)</span>
+            <span class="p">})</span>
+
+        <span class="n">db</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">history</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="archivingresource">
+<h2>ArchivingResource<a class="headerlink" href="#archivingresource" title="Permalink to this heading">¶</a></h2>
+<p>Sometimes soft-deletion is preferable over full deletion. This custom <code class="xref py py-class docutils literal notranslate"><span class="pre">ModelResource</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">Manager</span></code> does
+not delete items, instead it <em>archives</em> them, removing them from the main instances route. Archived items can be viewed
+in the archive route from where they can be restored but not updated.</p>
+<p>Replace <code class="xref py py-class docutils literal notranslate"><span class="pre">RelationalManager</span></code> with an appropriate base class, such as <code class="xref py py-class docutils literal notranslate"><span class="pre">SQLAlchemyManager</span></code>. <code class="xref py py-class docutils literal notranslate"><span class="pre">PrincipalManager</span></code> can also be used as the base class for the manager with
+some minor changes.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">Location</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">ARCHIVE_ONLY</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">INSTANCES_ONLY</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">BOTH</span> <span class="o">=</span> <span class="mi">3</span>
+
+
+<span class="k">class</span> <span class="nc">ArchiveManager</span><span class="p">(</span><span class="n">RelationalManager</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">Location</span><span class="o">.</span><span class="n">INSTANCES_ONLY</span><span class="p">):</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_query</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">source</span> <span class="o">==</span> <span class="n">Location</span><span class="o">.</span><span class="n">BOTH</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">query</span>
+        <span class="k">elif</span> <span class="n">source</span> <span class="o">==</span> <span class="n">Location</span><span class="o">.</span><span class="n">ARCHIVE_ONLY</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">query</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s1">&#39;is_archived&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">query</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s1">&#39;is_archived&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">instances</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">where</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sort</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">Location</span><span class="o">.</span><span class="n">INSTANCES_ONLY</span><span class="p">):</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_query</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">where</span><span class="p">:</span>
+            <span class="n">expressions</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_expression_for_condition</span><span class="p">(</span><span class="n">condition</span><span class="p">)</span> <span class="k">for</span> <span class="n">condition</span> <span class="ow">in</span> <span class="n">where</span><span class="p">]</span>
+            <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_query_filter</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_and_expression</span><span class="p">(</span><span class="n">expressions</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">sort</span><span class="p">:</span>
+            <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_query_order_by</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">sort</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">query</span>
+
+    <span class="k">def</span> <span class="nf">archive_instances</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">page</span><span class="p">,</span> <span class="n">per_page</span><span class="p">,</span> <span class="n">where</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sort</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span>\
+            <span class="o">.</span><span class="n">instances</span><span class="p">(</span><span class="n">where</span><span class="o">=</span><span class="n">where</span><span class="p">,</span> <span class="n">sort</span><span class="o">=</span><span class="n">sort</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">Location</span><span class="o">.</span><span class="n">ARCHIVE_ONLY</span><span class="p">)</span>\
+            <span class="o">.</span><span class="n">paginate</span><span class="p">(</span><span class="n">page</span><span class="o">=</span><span class="n">page</span><span class="p">,</span> <span class="n">per_page</span><span class="o">=</span><span class="n">per_page</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">Location</span><span class="o">.</span><span class="n">INSTANCES_ONLY</span><span class="p">):</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_query</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">query</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ItemNotFound</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">resource</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="nb">id</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_query_filter_by_id</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="nb">id</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">ArchivingResource</span><span class="p">(</span><span class="n">ModelResource</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+        <span class="n">manager</span> <span class="o">=</span> <span class="n">ArchiveManager</span>
+        <span class="n">exclude_routes</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;destroy&#39;</span><span class="p">]</span> <span class="c1"># we&#39;re using rel=&quot;archive&quot; instead.</span>
+
+    <span class="k">class</span> <span class="nc">Schema</span><span class="p">:</span>
+        <span class="n">is_archived</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Boolean</span><span class="p">(</span><span class="n">io</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">)</span>
+
+    <span class="nd">@route</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/&lt;int:id&gt;&#39;</span><span class="p">,</span> <span class="n">rel</span><span class="o">=</span><span class="s2">&quot;self&quot;</span><span class="p">,</span> <span class="n">attribute</span><span class="o">=</span><span class="s2">&quot;instance&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">fields</span><span class="o">.</span><span class="n">Inline</span><span class="p">(</span><span class="s1">&#39;self&#39;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">id</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">Location</span><span class="o">.</span><span class="n">BOTH</span><span class="p">)</span>
+
+    <span class="nd">@read</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">rel</span><span class="o">=</span><span class="s2">&quot;update&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">properties</span><span class="p">,</span> <span class="nb">id</span><span class="p">):</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">id</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">Location</span><span class="o">.</span><span class="n">INSTANCES_ONLY</span><span class="p">)</span>
+        <span class="n">updated_item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">properties</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">updated_item</span>
+
+    <span class="n">update</span><span class="o">.</span><span class="n">response_schema</span> <span class="o">=</span> <span class="n">update</span><span class="o">.</span><span class="n">request_schema</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Inline</span><span class="p">(</span><span class="s1">&#39;self&#39;</span><span class="p">,</span> <span class="n">patch_instance</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="nd">@update</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">rel</span><span class="o">=</span><span class="s2">&quot;archive&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">destroy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">id</span><span class="p">):</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">id</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">Location</span><span class="o">.</span><span class="n">INSTANCES_ONLY</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">manager</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;is_archived&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="mi">204</span>
+
+    <span class="nd">@route</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/archive&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">archive_instances</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager</span><span class="o">.</span><span class="n">archive_instances</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="n">archive_instances</span><span class="o">.</span><span class="n">request_schema</span> <span class="o">=</span> <span class="n">archive_instances</span><span class="o">.</span><span class="n">response_schema</span> <span class="o">=</span> <span class="n">Instances</span><span class="p">()</span>
+
+    <span class="nd">@route</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/archive/&lt;int:id&gt;&#39;</span><span class="p">,</span> <span class="n">rel</span><span class="o">=</span><span class="s2">&quot;readArchived&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">read_archive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">fields</span><span class="o">.</span><span class="n">Inline</span><span class="p">(</span><span class="s1">&#39;self&#39;</span><span class="p">):</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">id</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">Location</span><span class="o">.</span><span class="n">ARCHIVE_ONLY</span><span class="p">)</span>
+
+    <span class="nd">@route</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s1">&#39;/archive/&lt;int:id&gt;/restore&#39;</span><span class="p">,</span> <span class="n">rel</span><span class="o">=</span><span class="s2">&quot;restoreFromArchive&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">restore_from_archive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">fields</span><span class="o">.</span><span class="n">Inline</span><span class="p">(</span><span class="s1">&#39;self&#39;</span><span class="p">):</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">id</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">Location</span><span class="o">.</span><span class="n">ARCHIVE_ONLY</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;is_archived&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">})</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Advanced Recipes</a><ul>
+<li><a class="reference internal" href="#historymixin">HistoryMixin</a></li>
+<li><a class="reference internal" href="#archivingresource">ArchivingResource</a></li>
+</ul>
+</li>
+</ul>
+
+  </div><h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="permissions.html" title="previous chapter">Permissions with <em>Flask-Principal</em></a></li>
+  </ul></li>
+</ul>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/recipes.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+  <div class="footer">
+    &copy; Copyright 2023, Arry Lee.
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a>.
+  </div>
+  
+  </body>
+</html>

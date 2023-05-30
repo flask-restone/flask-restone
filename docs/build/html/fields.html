@@ -1,0 +1,455 @@
+
+<!DOCTYPE html>
+
+<html lang="EN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>Field types &#8212; Flask-Restone 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/flasky.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Filters" href="filters.html" />
+    <link rel="prev" title="Quick Start Guide" href="quickstart.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head><body>
+  
+  
+
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="filters.html" title="Filters"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="quickstart.html" title="Quick Start Guide"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Flask-Restone 0.1.0 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Field types</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="module-flask_restone">
+<span id="id1"></span><span id="field-types"></span><h1>Field types<a class="headerlink" href="#module-flask_restone" title="Permalink to this heading">¶</a></h1>
+<section id="field-field-class">
+<h2><a class="reference internal" href="#flask_restone.Field" title="flask_restone.Field"><code class="xref py py-class docutils literal notranslate"><span class="pre">Field</span></code></a> field class<a class="headerlink" href="#field-field-class" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Field">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Field</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schema</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">io</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'rw'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attribute</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Field" title="Permalink to this definition">¶</a></dt>
+<dd><p>基本字段模式
+属性：</p>
+<blockquote>
+<div><p>schema 本字段的请求模式和响应模式
+io 本字段的可读写性 r 只读 w 只写
+default 默认值 或 默认调用方法
+attribute 属性名
+nullable 可否为空
+title 标题
+description 字段描述</p>
+</div></blockquote>
+<p>基本上和 ORM 的模型字段参数一样</p>
+<p>JSON Schema的一般格式包括以下几个部分：
+$schema：指定所使用的JSON Schema版本，
+例如：”$schema”: “<a class="reference external" href="http://json-schema.org/draft-07">http://json-schema.org/draft-07</a>/schema#”
+type：指定所描述的数据结构的类型，可以是object、array、number、string、integer、boolean、null等
+title：指定所描述的数据结构的名称
+description：对所描述的数据结构进行详细描述
+properties：指定对象类型的属性及其约束条件，是一个键值对，其中键是属性名，值是约束条件，
+例如：”properties”: {“name”: {“type”: “string”}, “age”: {“type”: “integer”, “minimum”: 0}}
+items：指定数组类型的元素及其约束条件，可以是单个元素的约束条件，也可以是元素类型的约束条件，
+例如：”items”: {“type”: “string”}或”items”: [{“type”: “string”}, {“type”: “integer”}]}
+required：指定对象类型的必选属性，是一个数组，例如：”required”: [“name”, “age”]
+additionalProperties：指定对象类型的其他属性的约束条件，如果不允许任何其他属性，可以将其设置为false，
+例如：”additionalProperties”: false
+minimum、maximum、exclusiveMinimum、exclusiveMaximum：指定数值类型的最小值、最大值及其开闭区间，
+例如：”minimum”: 0, “maximum”: 100, “exclusiveMaximum”: true
+minLength、maxLength、pattern：指定字符串类型的长度和格式约束条件，
+例如：”minLength”: 3, “maxLength”: 10, “pattern”: “^[a-z]+$”
+enum：指定枚举类型的取值范围，例如：”enum”: [“male”, “female”]
+format：指定字符串类型的格式约束条件，例如：”format”: “email”
+$ref：引用其他JSON Schema定义的约束条件，例如：”$ref”: “<a class="reference external" href="http://json-schema.org/draft-07">http://json-schema.org/draft-07</a>/schema#”</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flask_restone.Field.faker">
+<span class="sig-name descname"><span class="pre">faker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Field.faker" title="Permalink to this definition">¶</a></dt>
+<dd><p>假数据生成，用于测试</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="reference-field-types">
+<h2>Reference field types<a class="headerlink" href="#reference-field-types" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Res">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Res</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resource</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patchable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Res" title="Permalink to this definition">¶</a></dt>
+<dd><p>内联对象就是将一个资源完整嵌入</p>
+<p>JSON _Schema 可以使用 $ref 关键字来表示递归的数据结构。
+$ref 关键字用于引用另一个位置的 JSON _Schema，
+这样可以在同一个 _Schema 中多次使用同一个定义，或者在不同的 _Schema 中使用相同的定义。</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Ref">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Ref</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resource</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Ref" title="Permalink to this definition">¶</a></dt>
+<dd><p>表示一个资源对象的引用
+Ref(‘books’)
+Ref(BookRes)</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Many">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Many</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resource</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Many" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="basic-field-types">
+<h2>Basic field types<a class="headerlink" href="#basic-field-types" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Any">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Any</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Any" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Str">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Str</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">min_length</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_length</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pattern</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Str" title="Permalink to this definition">¶</a></dt>
+<dd><p>JSON Schema的string类型的format包括：</p>
+<p>date-time：日期时间格式，如：2018-11-13T20:20:39+00:00
+date：日期格式，如：2018-11-13
+time：时间格式，如：20:20:39+00:00
+email：电子邮件地址格式，如：<a class="reference external" href="mailto:user&#37;&#52;&#48;example&#46;com">user<span>&#64;</span>example<span>&#46;</span>com</a>
+idn-email：国际化电子邮件地址格式，如：user&#64;示例.公司
+hostname：主机名格式，如：example.com
+idn-hostname：国际化主机名格式，如：示例.公司
+ipv4：IPv4地址格式，如：192.0.2.1
+ipv6：IPv6地址格式，如：2001:0db8:85a3:0000:0000:8a2e:0370:7334
+uri：URI格式，如：<a class="reference external" href="https://example.com/path/to/resource">https://example.com/path/to/resource</a>
+uri-reference：URI引用格式，如：/path/to/resource
+uri-template：URI模板格式，如：/path/{id}
+json-pointer：JSON指针格式，如：/path/to/property
+relative-json-pointer：相对JSON指针格式，如：2/property
+regex：正则表达式格式，如：^[a-z]+$
+uuid：UUID格式，如：123e4567-e89b-12d3-a456-426655440000</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flask_restone.Str.faker">
+<span class="sig-name descname"><span class="pre">faker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Str.faker" title="Permalink to this definition">¶</a></dt>
+<dd><p>假数据生成，用于测试</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Int">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Int</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">minimum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Int" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="flask_restone.Int.faker">
+<span class="sig-name descname"><span class="pre">faker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Int.faker" title="Permalink to this definition">¶</a></dt>
+<dd><p>假数据生成，用于测试</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Float">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Float</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">minimum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclusive_minimum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclusive_maximum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Float" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="flask_restone.Float.faker">
+<span class="sig-name descname"><span class="pre">faker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Float.faker" title="Permalink to this definition">¶</a></dt>
+<dd><p>假数据生成，用于测试</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Bool">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Bool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Bool" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="flask_restone.Bool.faker">
+<span class="sig-name descname"><span class="pre">faker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Bool.faker" title="Permalink to this definition">¶</a></dt>
+<dd><p>假数据生成，用于测试</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Date">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Date</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'string'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Date" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="flask_restone.Date.faker">
+<span class="sig-name descname"><span class="pre">faker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Date.faker" title="Permalink to this definition">¶</a></dt>
+<dd><p>假数据生成，用于测试</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.DateTime">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">DateTime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'string'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.DateTime" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="composite-field-types">
+<h2>Composite field types<a class="headerlink" href="#composite-field-types" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.List">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">List</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schema</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_items</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_items</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unique</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.List" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="flask_restone.List.faker">
+<span class="sig-name descname"><span class="pre">faker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.List.faker" title="Permalink to this definition">¶</a></dt>
+<dd><p>假数据生成，用于测试</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Dict">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">properties</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pattern</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pattern_props</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">other_props</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">io</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'rw'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attribute</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>在 JSON _Schema 中，’patternProperties是一个关键字，用于描述对象属性的模式。
+它是一个用于限制 JSON 数据中对象属性模式的关键字，可以用来描述对象中所有匹配某个
+正则表达式模式的属性的限制条件。
+‘patternProperties关键字的值是一个对象，其中每个属性的名称是一个正则表达式模式，
+用于匹配对象中的属性名；每个属性的值是一个 JSON _Schema 对象，用于描述对象中对应属性的限制条件。
+例如，以下 JSON _Schema 用于描述一个具有两个属性的对象，其中属性名必须以大写字母’A’或’B’开头，属性值必须为整数：</p>
+<dl>
+<dt>{</dt><dd><p>“type”: “object”,
+“patternProperties”: {</p>
+<blockquote>
+<div><dl class="simple">
+<dt>“^A”: {</dt><dd><p>“type”: “integer”</p>
+</dd>
+</dl>
+<p>},
+“^B”: {</p>
+<blockquote>
+<div><p>“type”: “integer”</p>
+</div></blockquote>
+<p>}</p>
+</div></blockquote>
+<p>},
+“additionalProperties”: false</p>
+</dd>
+</dl>
+<p>}
+在这个例子中，’patternProperties的值是一个对象，其中包含两个属性，分别是以’A’和’B’开头的属性名的正则表达式模式。
+每个属性的值是一个 JSON _Schema 对象，用于描述属性的限制条件。
+该 JSON _Schema 还使用了’additionalProperties’关键字，用于禁止出现除了以’A’和’B’开头的属性名以外的其他属性。
+使用’patternProperties’关键字可以使 JSON _Schema 更加灵活，可以描述更加复杂的数据结构。</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="flask_restone.Dict.faker">
+<span class="sig-name descname"><span class="pre">faker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Dict.faker" title="Permalink to this definition">¶</a></dt>
+<dd><p>假数据生成，用于测试</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Union">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Union</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">schemas</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Union" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="flask_restone.Union.faker">
+<span class="sig-name descname"><span class="pre">faker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Union.faker" title="Permalink to this definition">¶</a></dt>
+<dd><p>假数据生成，用于测试</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.Optional">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">Optional</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schema</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">io</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'rw'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attribute</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.Optional" title="Permalink to this definition">¶</a></dt>
+<dd><p>提议
+兼容 Optional[Int]
+和 Optional|Int</p>
+</dd></dl>
+
+</section>
+<section id="sqlalchemy-specific-field-types">
+<h2>SQLAlchemy-specific field types<a class="headerlink" href="#sqlalchemy-specific-field-types" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.ModelDict">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">ModelDict</span></span><a class="headerlink" href="#flask_restone.ModelDict" title="Permalink to this definition">¶</a></dt>
+<dd><p>For creating SQLAlchemy models without having to give them their own resource.</p>
+<p>Usage example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">FooResource</span><span class="p">(</span><span class="n">Resource</span><span class="p">):</span>
+   <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+      <span class="n">model</span> <span class="o">=</span> <span class="n">Foo</span>
+
+   <span class="k">class</span> <span class="nc">Schema</span><span class="p">:</span>
+      <span class="c1"># Here, Foo.bars is a collection of Bar items</span>
+      <span class="n">bars</span> <span class="o">=</span> <span class="n">List</span><span class="p">(</span><span class="n">ModelDict</span><span class="p">({</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">Str</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Bar name&quot;</span><span class="p">),</span>
+      <span class="s2">&quot;height&quot;</span><span class="p">:</span> <span class="n">Int</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Height of bar&quot;</span><span class="p">)},</span> <span class="n">model</span><span class="o">=</span><span class="n">Bar</span><span class="p">))</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>properties</strong> (<em>dict</em>) – A dictionary of <a class="reference internal" href="#flask_restone.Field" title="flask_restone.Field"><code class="xref py py-class docutils literal notranslate"><span class="pre">Field</span></code></a> objects</p></li>
+<li><p><strong>model</strong> – An SQLAlchemy model</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="internal-types">
+<h2>Internal types<a class="headerlink" href="#internal-types" title="Permalink to this heading">¶</a></h2>
+<section id="id2">
+<h3>Field types<a class="headerlink" href="#id2" title="Permalink to this heading">¶</a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone.ResUri">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">ResUri</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resource</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attribute</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.ResUri" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="flask_restone.ResUri.faker">
+<span class="sig-name descname"><span class="pre">faker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone.ResUri.faker" title="Permalink to this definition">¶</a></dt>
+<dd><p>假数据生成，用于测试</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-schema">
+<span id="schema-types"></span><h3>Schema types<a class="headerlink" href="#module-schema" title="Permalink to this heading">¶</a></h3>
+</section>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Field types</a><ul>
+<li><a class="reference internal" href="#field-field-class"><code class="xref py py-class docutils literal notranslate"><span class="pre">Field</span></code> field class</a><ul>
+<li><a class="reference internal" href="#flask_restone.Field"><code class="docutils literal notranslate"><span class="pre">Field</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone.Field.faker"><code class="docutils literal notranslate"><span class="pre">Field.faker()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#reference-field-types">Reference field types</a><ul>
+<li><a class="reference internal" href="#flask_restone.Res"><code class="docutils literal notranslate"><span class="pre">Res</span></code></a></li>
+<li><a class="reference internal" href="#flask_restone.Ref"><code class="docutils literal notranslate"><span class="pre">Ref</span></code></a></li>
+<li><a class="reference internal" href="#flask_restone.Many"><code class="docutils literal notranslate"><span class="pre">Many</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#basic-field-types">Basic field types</a><ul>
+<li><a class="reference internal" href="#flask_restone.Any"><code class="docutils literal notranslate"><span class="pre">Any</span></code></a></li>
+<li><a class="reference internal" href="#flask_restone.Str"><code class="docutils literal notranslate"><span class="pre">Str</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone.Str.faker"><code class="docutils literal notranslate"><span class="pre">Str.faker()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#flask_restone.Int"><code class="docutils literal notranslate"><span class="pre">Int</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone.Int.faker"><code class="docutils literal notranslate"><span class="pre">Int.faker()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#flask_restone.Float"><code class="docutils literal notranslate"><span class="pre">Float</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone.Float.faker"><code class="docutils literal notranslate"><span class="pre">Float.faker()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#flask_restone.Bool"><code class="docutils literal notranslate"><span class="pre">Bool</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone.Bool.faker"><code class="docutils literal notranslate"><span class="pre">Bool.faker()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#flask_restone.Date"><code class="docutils literal notranslate"><span class="pre">Date</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone.Date.faker"><code class="docutils literal notranslate"><span class="pre">Date.faker()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#flask_restone.DateTime"><code class="docutils literal notranslate"><span class="pre">DateTime</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#composite-field-types">Composite field types</a><ul>
+<li><a class="reference internal" href="#flask_restone.List"><code class="docutils literal notranslate"><span class="pre">List</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone.List.faker"><code class="docutils literal notranslate"><span class="pre">List.faker()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#flask_restone.Dict"><code class="docutils literal notranslate"><span class="pre">Dict</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone.Dict.faker"><code class="docutils literal notranslate"><span class="pre">Dict.faker()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#flask_restone.Union"><code class="docutils literal notranslate"><span class="pre">Union</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone.Union.faker"><code class="docutils literal notranslate"><span class="pre">Union.faker()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#flask_restone.Optional"><code class="docutils literal notranslate"><span class="pre">Optional</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#sqlalchemy-specific-field-types">SQLAlchemy-specific field types</a><ul>
+<li><a class="reference internal" href="#flask_restone.ModelDict"><code class="docutils literal notranslate"><span class="pre">ModelDict</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#internal-types">Internal types</a><ul>
+<li><a class="reference internal" href="#id2">Field types</a><ul>
+<li><a class="reference internal" href="#flask_restone.ResUri"><code class="docutils literal notranslate"><span class="pre">ResUri</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone.ResUri.faker"><code class="docutils literal notranslate"><span class="pre">ResUri.faker()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-schema">Schema types</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  </div><h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="quickstart.html" title="previous chapter">Quick Start Guide</a></li>
+      <li>Next: <a href="filters.html" title="next chapter">Filters</a></li>
+  </ul></li>
+</ul>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/fields.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+  <div class="footer">
+    &copy; Copyright 2023, Arry Lee.
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a>.
+  </div>
+  
+  </body>
+</html>

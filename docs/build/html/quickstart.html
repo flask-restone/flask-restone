@@ -1,0 +1,629 @@
+
+<!DOCTYPE html>
+
+<html lang="EN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>Quick Start Guide &#8212; Flask-Restone 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/flasky.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Field types" href="fields.html" />
+    <link rel="prev" title="Installation" href="installation.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head><body>
+  
+  
+
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="fields.html" title="Field types"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="installation.html" title="Installation"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Flask-Restone 0.1.0 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Quick Start Guide</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="quick-start-guide">
+<h1>Quick Start Guide<a class="headerlink" href="#quick-start-guide" title="Permalink to this heading">¶</a></h1>
+<p>This introductory guide describes how to set up an API using SQLAlchemy with Flask-Resone, query it, and attach routes
+to resources.</p>
+<p>A minimal Flask-Resone API looks like this:</p>
+<span class="target" id="module-flask_restone"></span><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">Flask</span>
+<span class="kn">from</span> <span class="nn">flask_sqlalchemy</span> <span class="kn">import</span> <span class="n">SQLAlchemy</span>
+<span class="kn">from</span> <span class="nn">flask_restone</span> <span class="kn">import</span> <span class="n">Api</span><span class="p">,</span> <span class="n">ModelResource</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">SQLAlchemy</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">Book</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Model</span><span class="p">):</span>
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">title</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Str</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">year_published</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">)</span>
+
+<span class="n">db</span><span class="o">.</span><span class="n">create_all</span><span class="p">()</span>
+
+<span class="k">class</span> <span class="nc">BookResource</span><span class="p">(</span><span class="n">ModelResource</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Book</span>
+
+<span class="n">api</span> <span class="o">=</span> <span class="n">Api</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+<span class="n">api</span><span class="o">.</span><span class="n">add_resources</span><span class="p">(</span><span class="n">BookResource</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Save this as <cite>server.py</cite> and run it using your Python interpreter. The application will create an in-memory SQLite
+database, so the state of the application will reset every time the server is restarted.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>python<span class="w"> </span>server.py
+<span class="w"> </span>*<span class="w"> </span>Running<span class="w"> </span>on<span class="w"> </span>http://127.0.0.1:5000/
+</pre></div>
+</div>
+<p>What did we do here? We used a <a class="reference internal" href="resources.html#flask_restone.ModelResource" title="flask_restone.ModelResource"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelResource</span></code></a> and defined a <code class="docutils literal notranslate"><span class="pre">model</span></code> in its <code class="xref py py-class docutils literal notranslate"><span class="pre">Meta</span></code> property.
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Meta</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">Schema</span></code> are the two of the primary ways to describe resources (a third being <a class="reference internal" href="routes.html#flask_restone.route" title="flask_restone.route"><code class="xref py py-class docutils literal notranslate"><span class="pre">route</span></code></a>,
+which we’ll go into later).</p>
+<section id="meta-class-attributes">
+<h2><code class="xref py py-class docutils literal notranslate"><span class="pre">Meta</span></code> class attributes<a class="headerlink" href="#meta-class-attributes" title="Permalink to this heading">¶</a></h2>
+<p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">Meta</span></code> class is how the basic functions of a resource are defined. Besides <code class="docutils literal notranslate"><span class="pre">model</span></code>, there
+are a few other properties that control how the <a class="reference internal" href="resources.html#flask_restone.ModelResource" title="flask_restone.ModelResource"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelResource</span></code></a> maps to the SQLAlchemy model:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Attribute name</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>model</p></td>
+<td><p>—</p></td>
+<td><p>The <cite>Flask-SQLAlchemy</cite> model</p></td>
+</tr>
+<tr class="row-odd"><td><p>name</p></td>
+<td><p>—</p></td>
+<td><p>Name of the resource; defaults to the lower-case of the <cite>model’s</cite> table name</p></td>
+</tr>
+<tr class="row-even"><td><p>id_attribute</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">'id'</span></code></p></td>
+<td><p>With SQLAlchemy models, defaults to the name of the primary key of <cite>model</cite>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>id_converter</p></td>
+<td><p>––</p></td>
+<td><p>Flask URL converter for resource routes. Typically this is inferred from <cite>id_field_class</cite>.</p></td>
+</tr>
+<tr class="row-even"><td><p>id_field_class</p></td>
+<td><p><a class="reference internal" href="fields.html#flask_restone.Int" title="flask_restone.Int"><code class="xref py py-class docutils literal notranslate"><span class="pre">Int</span></code></a></p></td>
+<td><p>Field class to use for <code class="docutils literal notranslate"><span class="pre">&quot;$id&quot;</span></code>, also used to determine the URL route converter for resource routes.</p></td>
+</tr>
+<tr class="row-odd"><td><p>include_id</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
+<td><p>Whether to include the id of the item as an <code class="docutils literal notranslate"><span class="pre">&quot;$id&quot;</span></code> attribute. The default is a <code class="docutils literal notranslate"><span class="pre">&quot;$uri&quot;</span></code> attribute with the URI of the item.</p></td>
+</tr>
+<tr class="row-even"><td><p>include_fields</p></td>
+<td><p>—</p></td>
+<td><p>A list of fields that should be imported from the <cite>model</cite>. By default, all
+columns other than foreign key and primary key columns are imported.
+<code class="xref py py-func docutils literal notranslate"><span class="pre">sqlalchemy.orm.relationship()</span></code> model attributes and hybrid properties
+cannot be defined in this way and have to be specified explicitly in <code class="xref py py-class docutils literal notranslate"><span class="pre">Schema</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>exclude_fields</p></td>
+<td><p>—</p></td>
+<td><p>A list of fields that should not be imported from the <cite>model</cite>.</p></td>
+</tr>
+<tr class="row-even"><td><p>required_fields</p></td>
+<td><p>—</p></td>
+<td><p>Fields that are automatically imported from the model are automatically
+required if their columns are not <cite>nullable</cite> and do not have a <cite>default</cite>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>read_only_fields</p></td>
+<td><p>—</p></td>
+<td><p>A list of fields that are returned by the resource but are ignored in <cite>POST</cite>
+and <cite>PATCH</cite> requests. Useful for e.g. timestamps.</p></td>
+</tr>
+<tr class="row-even"><td><p>filters</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
+<td><p>Used to configure what properties of an item can be filtered and what filters can be used.</p></td>
+</tr>
+<tr class="row-odd"><td><p>write_only_fields</p></td>
+<td><p>—</p></td>
+<td><p>A list of fields that can be written to but are not returned. For secret stuff.</p></td>
+</tr>
+<tr class="row-even"><td><p>title</p></td>
+<td><p>—</p></td>
+<td><p>JSON-schema title declaration</p></td>
+</tr>
+<tr class="row-odd"><td><p>description</p></td>
+<td><p>—</p></td>
+<td><p>JSON-schema description declaration</p></td>
+</tr>
+<tr class="row-even"><td><p>manager</p></td>
+<td><p><a class="reference internal" href="managers.html#flask_restone.SQLAlchemyManager" title="flask_restone.SQLAlchemyManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">SQLAlchemyManager</span></code></a></p></td>
+<td><p>A <a class="reference internal" href="managers.html#flask_restone.Manager" title="flask_restone.Manager"><code class="xref py py-class docutils literal notranslate"><span class="pre">Manager</span></code></a> class that takes care of reading from and writing to the data store</p></td>
+</tr>
+<tr class="row-odd"><td><p>key_converters</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(RefKey(),</span> <span class="pre">IDKey())</span></code></p></td>
+<td><p>A list of <code class="xref py py-class docutils literal notranslate"><span class="pre">natural_keys.Key</span></code> instances. The first is used for formatting <code class="docutils literal notranslate"><span class="pre">Res</span></code> references.</p></td>
+</tr>
+<tr class="row-even"><td><p>natural_key</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>A string, or tuple of strings, corresponding to schema field names, for a natural key.</p></td>
+</tr>
+<tr class="row-odd"><td><p>exclude_routes</p></td>
+<td><p>—</p></td>
+<td><p>A list of rel-strings for any previously defined routes that should not be published for this resource.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="schema-class-attributes">
+<h2><code class="xref py py-class docutils literal notranslate"><span class="pre">Schema</span></code> class attributes<a class="headerlink" href="#schema-class-attributes" title="Permalink to this heading">¶</a></h2>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">Schema</span></code> is used to define a default schema for a resource. The <code class="xref py py-class docutils literal notranslate"><span class="pre">Schema</span></code> class contains a set of fields
+that inherit from <a class="reference internal" href="fields.html#flask_restone.Field" title="flask_restone.Field"><code class="xref py py-class docutils literal notranslate"><span class="pre">Field</span></code></a></p>
+<p>Using <cite>ModelResource</cite> with a SQLAlchemy model, the schema is for the most part auto-generated for us. Yet it still on
+occasion makes sense to manually describe a field. The reference field types, <a class="reference internal" href="fields.html#flask_restone.Res" title="flask_restone.Res"><code class="xref py py-class docutils literal notranslate"><span class="pre">Res</span></code></a> and <a class="reference internal" href="fields.html#flask_restone.Many" title="flask_restone.Many"><code class="xref py py-class docutils literal notranslate"><span class="pre">Many</span></code></a>, also
+need to be set by hand.</p>
+<p>For instance, our <em>book</em> resource only stores books produced by the printing press. Let’s acknowledge this by setting a
+sensible minimum for <code class="docutils literal notranslate"><span class="pre">year_published</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">flask_restone</span> <span class="kn">import</span> <span class="n">fields</span>
+
+<span class="k">class</span> <span class="nc">BookResource</span><span class="p">(</span><span class="n">ModelResource</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Book</span>
+
+    <span class="k">class</span> <span class="nc">Schema</span><span class="p">:</span>
+        <span class="n">year_published</span> <span class="o">=</span> <span class="n">Int</span><span class="p">[</span><span class="mi">1400</span><span class="p">:]</span>
+</pre></div>
+</div>
+</section>
+<section id="relationships">
+<span id="id1"></span><h2>Relationships<a class="headerlink" href="#relationships" title="Permalink to this heading">¶</a></h2>
+<p>RESTful relationships create a variety of API client design and caching problems that Restone has been written to address.
+To preface what you will see now, it needs to be said that Restone should be used with SPDY or the upcoming HTTP/2 as it generates more requests than some alternative
+approaches.</p>
+<p>We now have both an <em>author</em> and a <em>book</em> resource:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">Flask</span>
+<span class="kn">from</span> <span class="nn">flask_sqlalchemy</span> <span class="kn">import</span> <span class="n">SQLAlchemy</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.orm</span> <span class="kn">import</span> <span class="n">backref</span>
+<span class="kn">from</span> <span class="nn">flask_restone.routes</span> <span class="kn">import</span> <span class="n">Relation</span>
+<span class="kn">from</span> <span class="nn">flask_restone</span> <span class="kn">import</span> <span class="n">ModelResource</span><span class="p">,</span> <span class="n">fields</span><span class="p">,</span> <span class="n">Api</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">SQLAlchemy</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">Author</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Model</span><span class="p">):</span>
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">first_name</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">last_name</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Str</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">Book</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Model</span><span class="p">):</span>
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">author_id</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">db</span><span class="o">.</span><span class="n">ForeignKey</span><span class="p">(</span><span class="n">Author</span><span class="o">.</span><span class="n">id</span><span class="p">),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">title</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">year_published</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">)</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">relationship</span><span class="p">(</span><span class="n">Author</span><span class="p">,</span> <span class="n">backref</span><span class="o">=</span><span class="n">backref</span><span class="p">(</span><span class="s1">&#39;books&#39;</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="s1">&#39;dynamic&#39;</span><span class="p">))</span>
+
+<span class="n">db</span><span class="o">.</span><span class="n">create_all</span><span class="p">()</span>
+
+<span class="k">class</span> <span class="nc">BookResource</span><span class="p">(</span><span class="n">ModelResource</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Book</span>
+
+    <span class="k">class</span> <span class="nc">Schema</span><span class="p">:</span>
+        <span class="n">author</span> <span class="o">=</span> <span class="n">Res</span><span class="p">(</span><span class="s1">&#39;author&#39;</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">AuthorResource</span><span class="p">(</span><span class="n">ModelResource</span><span class="p">):</span>
+    <span class="n">books</span> <span class="o">=</span> <span class="n">Relation</span><span class="p">(</span><span class="s1">&#39;book&#39;</span><span class="p">)</span>
+
+    <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Author</span>
+
+<span class="n">api</span> <span class="o">=</span> <span class="n">Api</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+<span class="n">api</span><span class="o">.</span><span class="n">add_resources</span><span class="p">(</span><span class="n">BookResource</span><span class="p">,</span><span class="n">AuthorResource</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>We’re going to add two authors and books:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>:5000/author<span class="w"> </span><span class="nv">first_name</span><span class="o">=</span>Charles<span class="w"> </span><span class="nv">last_name</span><span class="o">=</span>Darwin
+</pre></div>
+</div>
+<div class="highlight-http notranslate"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.0</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Length</span><span class="o">:</span> <span class="l">69</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+<span class="na">Date</span><span class="o">:</span> <span class="l">Sat, 07 Feb 2015 12:11:33 GMT</span>
+<span class="na">Server</span><span class="o">:</span> <span class="l">Werkzeug/0.9.6 Python/3.3.2</span>
+
+<span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;$uri&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/author/1&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;first_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Charles&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;last_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Darwin&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>At the moment, references always need to be declared as json-ref objects.
+This is tedious during command-line use, and an enhancement to Restone to support using ids and natural keys in requests is already in the works.</p>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>:5000/book<span class="w"> </span><span class="nv">title</span><span class="o">=</span><span class="s2">&quot;On the Origin of Species&quot;</span><span class="w"> </span>author:<span class="o">=</span><span class="m">1</span><span class="w"> </span>year_published:<span class="o">=</span><span class="m">1859</span>
+</pre></div>
+</div>
+<div class="highlight-http notranslate"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.0</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Length</span><span class="o">:</span> <span class="l">113</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+<span class="na">Date</span><span class="o">:</span> <span class="l">Sat, 07 Feb 2015 12:16:11 GMT</span>
+<span class="na">Server</span><span class="o">:</span> <span class="l">Werkzeug/0.9.6 Python/3.3.2</span>
+
+<span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;$uri&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/book/1&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;author&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;$ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/author/1&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;On the Origin of Species&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;year_published&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1859</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>:5000/author<span class="w"> </span><span class="nv">first_name</span><span class="o">=</span>James<span class="w"> </span><span class="nv">last_name</span><span class="o">=</span>Watson<span class="w"> </span>&gt;<span class="w"> </span>/dev/null
+http<span class="w"> </span>:5000/book<span class="w"> </span><span class="nv">title</span><span class="o">=</span><span class="s2">&quot;The Double Helix&quot;</span><span class="w"> </span>author:<span class="o">=</span><span class="m">2</span><span class="w"> </span>year_published:<span class="o">=</span><span class="m">1968</span><span class="w"> </span>&gt;<span class="w"> </span>/dev/null
+</pre></div>
+</div>
+<p>As you can see, references in Restone are <a class="reference external" href="https://tools.ietf.org/html/draft-pbryan-zyp-json-ref-03">JSON Reference</a> draft reference
+objects. These objects always have the same format — <code class="docutils literal notranslate"><span class="pre">{&quot;$ref&quot;:</span> <span class="pre">'target-uri'}</span></code> — and can easily be recognized by an API client
+when deserializing JSON. An API client can first check its cache for the target item and, if necessary, query it from the server.</p>
+<p>Requests allow both plain ids and <em>json-ref</em> objects — it’s all the same to the server.</p>
+<p>There are now two ways available to us for querying the relationship between the resources. The first is the author’s
+<code class="docutils literal notranslate"><span class="pre">Relation('book')</span></code>, which created a new route on the <em>author</em> resource with references to the book resource. Let’s query Charles’ books:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>:5000/author/1/books
+</pre></div>
+</div>
+<div class="highlight-http notranslate"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.0</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Length</span><span class="o">:</span> <span class="l">21</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+<span class="na">Date</span><span class="o">:</span> <span class="l">Sat, 07 Feb 2015 12:18:45 GMT</span>
+<span class="na">Link</span><span class="o">:</span> <span class="l">&lt;/author/1/books?page=1&amp;per_page=20&gt;; rel=&quot;self&quot;,&lt;/author/1/books?page=1&amp;per_page=20&gt;; rel=&quot;last&quot;</span>
+<span class="na">Server</span><span class="o">:</span> <span class="l">Werkzeug/0.9.6 Python/3.3.2</span>
+<span class="na">X-Total-Count</span><span class="o">:</span> <span class="l">1</span>
+
+<span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;$ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/book/1&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+<p>This is not a particularly good example for using <a class="reference internal" href="routes.html#flask_restone.Relation" title="flask_restone.Relation"><code class="xref py py-class docutils literal notranslate"><span class="pre">Relation</span></code></a>, and in fact there are few at all. There is a more
+RESTful way for querying a <em>one-to-many</em> relation:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>GET<span class="w"> </span>:5000/book<span class="w"> </span><span class="nv">where</span><span class="o">==</span><span class="s1">&#39;{&quot;author&quot;: {&quot;$ref&quot;: &quot;/author/1&quot;}}&#39;</span>
+</pre></div>
+</div>
+<div class="highlight-http notranslate"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.0</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Length</span><span class="o">:</span> <span class="l">115</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+<span class="na">Date</span><span class="o">:</span> <span class="l">Sat, 07 Feb 2015 12:34:18 GMT</span>
+<span class="na">Link</span><span class="o">:</span> <span class="l">&lt;/book?page=1&amp;per_page=20&gt;; rel=&quot;self&quot;,&lt;/book?page=1&amp;per_page=20&gt;; rel=&quot;last&quot;</span>
+<span class="na">Server</span><span class="o">:</span> <span class="l">Werkzeug/0.9.6 Python/3.3.2</span>
+<span class="na">X-Total-Count</span><span class="o">:</span> <span class="l">1</span>
+
+<span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;$uri&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/book/1&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;author&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;$ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/author/1&quot;</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;On the Origin of Species&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;year_published&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1859</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+<p>So far, in our queries, we have used item ids and <em>json-ref</em> objects to refer to items. These <em>surrogate keys</em> can
+be difficult to remember and tedious to work with on the command line — but Restone has a solution:</p>
+<section id="natural-keys">
+<h3>Natural Keys<a class="headerlink" href="#natural-keys" title="Permalink to this heading">¶</a></h3>
+<p>A <em>natural key</em> is a unique identifier that exists in the real world and is often more memorable than
+a surrogate key. Restone ships with support for declaring natural keys.</p>
+<p>The <em>author</em> model has both a first name and a last name. Together, these two names form a natural key for the <em>author</em> resource. We’ll update both our database model and our resource to reflect this:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">Author</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Model</span><span class="p">):</span>
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">first_name</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">last_name</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">__table_args__</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">UniqueConstraint</span><span class="p">(</span><span class="s1">&#39;first_name&#39;</span><span class="p">,</span> <span class="s1">&#39;last_name&#39;</span><span class="p">),</span>  <span class="c1"># unique constraint added here</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">AuthorResource</span><span class="p">(</span><span class="n">ModelResource</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Author</span>
+        <span class="n">natural_key</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;first_name&#39;</span><span class="p">,</span> <span class="s1">&#39;last_name&#39;</span><span class="p">)</span>  <span class="c1"># natural key declaration added here</span>
+</pre></div>
+</div>
+<p>Now our earlier query can be written using the full name of the author:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>GET<span class="w"> </span>:5000/book<span class="w"> </span><span class="nv">where</span><span class="o">==</span><span class="s1">&#39;{&quot;author&quot;: [&quot;Charles&quot;, &quot;Darwin&quot;]}&#39;</span>
+</pre></div>
+</div>
+<p>Natural keys can be declared as either a single unique field or a tuple of fields that are unique together.</p>
+</section>
+</section>
+<section id="filtering-sorting">
+<h2>Filtering &amp; Sorting<a class="headerlink" href="#filtering-sorting" title="Permalink to this heading">¶</a></h2>
+<p>Instances of a <a class="reference internal" href="resources.html#flask_restone.ModelResource" title="flask_restone.ModelResource"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelResource</span></code></a> can be filtered using the <em>where</em> query and sorted using <em>sort</em>.</p>
+<p>We were interested in relations, so we filtered a <a class="reference internal" href="fields.html#flask_restone.Res" title="flask_restone.Res"><code class="xref py py-class docutils literal notranslate"><span class="pre">Res</span></code></a> field for equality. Most other field types can also be filtered and support custom comparators. Here are some examples of <em>where</em> queries:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>:5000/book<span class="w"> </span><span class="nv">where</span><span class="o">==</span><span class="s1">&#39;{&quot;year_published&quot;: {&quot;$gt&quot;: 1900}}&#39;</span><span class="w">                </span><span class="c1"># Book.year_published &gt; 1900</span>
+http<span class="w"> </span>:5000/author<span class="w"> </span><span class="nv">where</span><span class="o">==</span><span class="s1">&#39;{&quot;first_name&quot;: {&quot;$sw&quot;: &quot;C&quot;}}&#39;</span><span class="w">           </span><span class="c1"># Author.first_name starts with &#39;C&#39;</span>
+http<span class="w"> </span>:5000/author<span class="w"> </span><span class="nv">where</span><span class="o">==</span><span class="s1">&#39;{&quot;first_name&quot;: {&quot;$in&quot;: [&quot;Charles&quot;, &quot;James&quot;]}}&#39;</span><span class="w">  </span><span class="c1"># Author.first_name in [&#39;Charles&#39;, &#39;James&#39;]</span>
+http<span class="w"> </span>:5000/book<span class="w"> </span><span class="nv">where</span><span class="o">==</span><span class="s1">&#39;{&quot;title&quot;: &quot;The Double Helix&quot;, &quot;year_published&quot;: {&quot;$lt&quot;: 2000}}&#39;</span>
+</pre></div>
+</div>
+<p>Here are some examples of <em>sort</em> queries:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>:5000/book<span class="w"> </span><span class="nv">sort</span><span class="o">==</span><span class="s1">&#39;{&quot;year_published&quot;: false}&#39;</span><span class="w">                </span><span class="c1"># Book.year_published ascending</span>
+http<span class="w"> </span>:5000/book<span class="w"> </span><span class="nv">sort</span><span class="o">==</span><span class="s1">&#39;{&quot;year_published&quot;: false, &quot;title&quot;: true}&#39;</span><span class="w"> </span><span class="c1"># Book.year_published ascending, Book.title descending</span>
+</pre></div>
+</div>
+<p>Both <em>where</em> and <em>sort</em> need to be valid JSON, so use double quotes.</p>
+<p>See <a class="reference internal" href="filters.html#sec-filters"><span class="std std-ref">Filters</span></a> for a full list of possible filters.</p>
+</section>
+<section id="pagination">
+<span id="id2"></span><h2>Pagination<a class="headerlink" href="#pagination" title="Permalink to this heading">¶</a></h2>
+<p>Restone pagination is borrowed from the <a class="reference external" href="http://developer.github.com/v3/#pagination">GitHub API</a>. Pages are requested
+using the <cite>page</cite> and <cite>per_page</cite> query string arguments. The <code class="docutils literal notranslate"><span class="pre">Link</span></code> header lists links to the current, first, previous, next, and last page.
+In addition, the <code class="docutils literal notranslate"><span class="pre">X-Total-Count</span></code> header contains a count of the total number of items.</p>
+<div class="highlight-http notranslate"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.0</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+<span class="na">Link</span><span class="o">:</span> <span class="l">&lt;/book?page=1&amp;per_page=20&gt;; rel=&quot;self&quot;,</span>
+      <span class="l">&lt;/book?page=3&amp;per_page=20&gt;; rel=&quot;last&quot;,</span>
+      <span class="l">&lt;/book?page=2&amp;per_page=20&gt;; rel=&quot;next&quot;</span>
+<span class="na">X-Total-Count</span><span class="o">:</span> <span class="l">55</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="resources.html#flask_restone.ModelResource" title="flask_restone.ModelResource"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelResource</span></code></a> items are paginated automatically.</p>
+<p>The default and maximum number of items per page can be configured using the
+<code class="docutils literal notranslate"><span class="pre">'RESTONE_DEFAULT_PER_PAGE'</span></code> and <code class="docutils literal notranslate"><span class="pre">'RESTONE_MAX_PER_PAGE'</span></code> configuration variables.</p>
+</section>
+<section id="routes">
+<h2>routes<a class="headerlink" href="#routes" title="Permalink to this heading">¶</a></h2>
+<p>routes are added using decorators named after the HTTP methods, declared either with or without arguments. The format
+for the route decorators is:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">route</span><span class="o">.</span><span class="n">method</span><span class="p">(</span><span class="n">rule</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+             <span class="n">rel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+             <span class="n">attribute</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+             <span class="n">schema</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+             <span class="n">response_schema</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>A <a class="reference internal" href="routes.html#flask_restone.route" title="flask_restone.route"><code class="xref py py-class docutils literal notranslate"><span class="pre">route</span></code></a> instance itself also has decorators for each method, so that they can define different functions
+for different HTTP methods on the same endpoint.</p>
+<p>Each method has its own <code class="docutils literal notranslate"><span class="pre">schema</span></code> and <code class="docutils literal notranslate"><span class="pre">response_schema</span></code> used to decode, verify, and encode requests and responses.
+If <code class="docutils literal notranslate"><span class="pre">schema</span></code> is a <code class="xref py py-class docutils literal notranslate"><span class="pre">FieldSet</span></code>, its properties are
+spread over the route function as keyword arguments.</p>
+<p><a class="reference internal" href="routes.html#flask_restone.itemroute" title="flask_restone.itemroute"><code class="xref py py-class docutils literal notranslate"><span class="pre">itemroute</span></code></a> is a special route, used with <a class="reference internal" href="resources.html#flask_restone.ModelResource" title="flask_restone.ModelResource"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelResource</span></code></a>, whose rule is prefixed <code class="docutils literal notranslate"><span class="pre">'/&lt;id_converter:id&gt;'</span></code> and
+that passes the item as the first function argument.</p>
+<p>Here is a slightly different <code class="xref py py-class docutils literal notranslate"><span class="pre">Book</span></code> model (a rating has been added) and a <em>book</em> resource with some of the different
+kinds of routes:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">Book</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Model</span><span class="p">):</span>
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">title</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Str</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">year_published</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">)</span>
+    <span class="n">rating</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">BookResource</span><span class="p">(</span><span class="n">ModelResource</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Book</span>
+        <span class="n">excluded_fields</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;rating&#39;</span><span class="p">]</span>
+
+    <span class="nd">@itemroute</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;/rating&#39;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">rating</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">book</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">book</span><span class="o">.</span><span class="n">rating</span>
+
+    <span class="nd">@rating</span><span class="o">.</span><span class="n">post</span>
+    <span class="k">def</span> <span class="nf">rate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">book</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Int</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">10</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Int</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">manager</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">book</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;rating&quot;</span><span class="p">:</span> <span class="n">value</span><span class="p">})</span>
+        <span class="k">return</span> <span class="n">value</span>
+
+    <span class="nd">@itemroute</span><span class="o">.</span><span class="n">get</span>
+    <span class="k">def</span> <span class="nf">is_recent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">book</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span> <span class="o">&lt;=</span> <span class="n">book</span><span class="o">.</span><span class="n">year_published</span> <span class="o">+</span> <span class="mi">10</span>
+
+    <span class="nd">@route</span><span class="o">.</span><span class="n">get</span>
+    <span class="k">def</span> <span class="nf">genres</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">(</span><span class="n">Str</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;A list of genres&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s1">&#39;biography&#39;</span><span class="p">,</span> <span class="s1">&#39;history&#39;</span><span class="p">,</span> <span class="s1">&#39;essay&#39;</span><span class="p">,</span> <span class="s1">&#39;law&#39;</span><span class="p">,</span> <span class="s1">&#39;philosophy&#39;</span><span class="p">]</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This example makes use of <a class="reference external" href="https://www.python.org/dev/peps/pep-3107/">function annotations</a>, which appeared in Python 3.0.</p>
+</div>
+<p>After adding a book, we can give these routes a spin:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>GET<span class="w"> </span>:5000/book/1/rating
+</pre></div>
+</div>
+<div class="highlight-http notranslate"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.0</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Length</span><span class="o">:</span> <span class="l">3</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+<span class="na">Date</span><span class="o">:</span> <span class="l">Sat, 07 Feb 2015 16:16:37 GMT</span>
+<span class="na">Server</span><span class="o">:</span> <span class="l">Werkzeug/0.9.6 Python/3.3.2</span>
+
+<span class="mi">5</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>POST<span class="w"> </span>:5000/book/1/rating<span class="w"> </span>value:<span class="o">=</span><span class="m">7</span>
+</pre></div>
+</div>
+<div class="highlight-http notranslate"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.0</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Length</span><span class="o">:</span> <span class="l">1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+<span class="na">Date</span><span class="o">:</span> <span class="l">Sat, 07 Feb 2015 16:17:59 GMT</span>
+<span class="na">Server</span><span class="o">:</span> <span class="l">Werkzeug/0.9.6 Python/3.3.2</span>
+
+<span class="mi">7</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>GET<span class="w"> </span>:5000/book/1/is-recent
+</pre></div>
+</div>
+<div class="highlight-http notranslate"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.0</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Length</span><span class="o">:</span> <span class="l">5</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+<span class="na">Date</span><span class="o">:</span> <span class="l">Sat, 07 Feb 2015 16:20:19 GMT</span>
+<span class="na">Server</span><span class="o">:</span> <span class="l">Werkzeug/0.9.6 Python/3.3.2</span>
+
+<span class="kc">false</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>http<span class="w"> </span>GET<span class="w"> </span>:5000/book/genres
+</pre></div>
+</div>
+<div class="highlight-http notranslate"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.0</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Length</span><span class="o">:</span> <span class="l">54</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+<span class="na">Date</span><span class="o">:</span> <span class="l">Sat, 07 Feb 2015 16:20:44 GMT</span>
+<span class="na">Server</span><span class="o">:</span> <span class="l">Werkzeug/0.9.6 Python/3.3.2</span>
+
+<span class="p">[</span>
+<span class="w">    </span><span class="s2">&quot;biography&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;history&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;essay&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;law&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;philosophy&quot;</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+<p>It is worth noting that <a class="reference internal" href="resources.html#flask_restone.ModelResource" title="flask_restone.ModelResource"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelResource</span></code></a> is not much more than the empty <a class="reference internal" href="resources.html#flask_restone.Resource" title="flask_restone.Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">Resource</span></code></a> type with a few custom
+routes. <a class="reference internal" href="routes.html#flask_restone.route" title="flask_restone.route"><code class="xref py py-class docutils literal notranslate"><span class="pre">route</span></code></a> and <a class="reference internal" href="resources.html#flask_restone.Resource" title="flask_restone.Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">Resource</span></code></a> are the backbone of Restone.</p>
+</section>
+<section id="route-sets-mixins">
+<h2>route Sets &amp; Mixins<a class="headerlink" href="#route-sets-mixins" title="Permalink to this heading">¶</a></h2>
+<p>In the example above, we have one property — rating — which can be read and updated by accessing
+a specific route. Restone provides a shortcut for this common pattern. Let’s use <a class="reference internal" href="routes.html#flask_restone.AttrRoute" title="flask_restone.AttrRoute"><code class="xref py py-class docutils literal notranslate"><span class="pre">AttrRoute</span></code></a> to rewrite the rating getter and setter:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">BookResource</span><span class="p">(</span><span class="n">ModelResource</span><span class="p">):</span>
+    <span class="n">rating</span> <span class="o">=</span> <span class="n">AttrRoute</span><span class="p">(</span><span class="n">Float</span><span class="p">)</span>
+
+    <span class="c1"># ...</span>
+</pre></div>
+</div>
+<p>Done. Now, this isn’t strictly a <em>set</em> of routes — but it implements <a class="reference internal" href="routes.html#flask_restone._RouteSet" title="flask_restone._RouteSet"><code class="xref py py-class docutils literal notranslate"><span class="pre">_RouteSet</span></code></a>, which can be used
+to write reusable groups of routes. (<a class="reference internal" href="routes.html#flask_restone.Relation" title="flask_restone.Relation"><code class="xref py py-class docutils literal notranslate"><span class="pre">Relation</span></code></a> is also a route set,:class:<cite>TaskRoute</cite> is also a route set).</p>
+<p>A second pattern for reusability is the <em>mixin</em>. They can augment the <code class="xref py py-class docutils literal notranslate"><span class="pre">Schema</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">Meta</span></code> attributes and
+add new routes and route sets to the resources. Here is an example mixin, adding two new fields to the schema:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">MetaMixin</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">Schema</span><span class="p">:</span>
+        <span class="n">created_at</span> <span class="o">=</span> <span class="n">DateTime</span><span class="p">(</span><span class="n">io</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">)</span>
+        <span class="n">updated_at</span> <span class="o">=</span> <span class="n">DateTime</span><span class="p">(</span><span class="n">io</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">BookResource</span><span class="p">(</span><span class="n">MetaMixin</span><span class="p">,</span> <span class="n">ModelResource</span><span class="p">):</span>
+    <span class="c1"># ...</span>
+</pre></div>
+</div>
+<p>Mixin and Resource base classes are evaluated left-to-right.</p>
+</section>
+<section id="self-documenting-api">
+<h2>Self-documenting API<a class="headerlink" href="#self-documenting-api" title="Permalink to this heading">¶</a></h2>
+<p>It can be a huge hassle to write and maintain the documentation of an API—not with Restone!
+In fact, every API you saw in this quick start guide was fully documented.</p>
+<p>It uses flasgger to generate documentation automatically. You just need to set the autodoc parameter of the API to True.
+Then you can read the doc and test your apis at <cite>http://&lt;ip&gt;:&lt;post&gt;/apidocs</cite>.</p>
+</section>
+<section id="next-steps">
+<h2>Next steps…<a class="headerlink" href="#next-steps" title="Permalink to this heading">¶</a></h2>
+<p>This guide has only skimmed the surface of what Restone can do for you.</p>
+<p>In particular you may be interested in <a class="reference internal" href="permissions.html#permissions"><span class="std std-ref">Permissions with Flask-Principal</span></a>, a guide to a fully-fledged permissions system for SQLAlchemy using Flask-Principal.</p>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Quick Start Guide</a><ul>
+<li><a class="reference internal" href="#meta-class-attributes"><code class="xref py py-class docutils literal notranslate"><span class="pre">Meta</span></code> class attributes</a></li>
+<li><a class="reference internal" href="#schema-class-attributes"><code class="xref py py-class docutils literal notranslate"><span class="pre">Schema</span></code> class attributes</a></li>
+<li><a class="reference internal" href="#relationships">Relationships</a><ul>
+<li><a class="reference internal" href="#natural-keys">Natural Keys</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#filtering-sorting">Filtering &amp; Sorting</a></li>
+<li><a class="reference internal" href="#pagination">Pagination</a></li>
+<li><a class="reference internal" href="#routes">routes</a></li>
+<li><a class="reference internal" href="#route-sets-mixins">route Sets &amp; Mixins</a></li>
+<li><a class="reference internal" href="#self-documenting-api">Self-documenting API</a></li>
+<li><a class="reference internal" href="#next-steps">Next steps…</a></li>
+</ul>
+</li>
+</ul>
+
+  </div><h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="installation.html" title="previous chapter">Installation</a></li>
+      <li>Next: <a href="fields.html" title="next chapter">Field types</a></li>
+  </ul></li>
+</ul>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/quickstart.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+  <div class="footer">
+    &copy; Copyright 2023, Arry Lee.
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a>.
+  </div>
+  
+  </body>
+</html>

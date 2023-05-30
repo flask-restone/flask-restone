@@ -1,0 +1,236 @@
+
+<!DOCTYPE html>
+
+<html lang="EN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>Filters &#8212; Flask-Restone 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/flasky.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Api" href="api.html" />
+    <link rel="prev" title="Field types" href="fields.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head><body>
+  
+  
+
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="api.html" title="Api"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="fields.html" title="Field types"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Flask-Restone 0.1.0 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Filters</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <span class="target" id="module-flask_restone"></span><section id="filters">
+<span id="sec-filters"></span><h1>Filters<a class="headerlink" href="#filters" title="Permalink to this heading">¶</a></h1>
+<section id="filter-expressions">
+<h2>Filter expressions<a class="headerlink" href="#filter-expressions" title="Permalink to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">Meta.filters</span></code> may contain an expression used to specify which properties of items belonging to a resource can be filtered, and how.</p>
+<p>The <cite>filters</cite> expression can be a <code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code> or a <code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code> of field names.</p>
+<p>For example, the following allows all filters:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">filters</span> <span class="o">=</span> <span class="kc">True</span>
+</pre></div>
+</div>
+<p>The following allows filtering on the <code class="docutils literal notranslate"><span class="pre">&quot;name&quot;</span></code> field:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">filters</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="kc">True</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The following allows filtering by equals and not equals on the <code class="docutils literal notranslate"><span class="pre">&quot;name&quot;</span></code> field:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">filters</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,)</span>
+</pre></div>
+</div>
+</section>
+<section id="built-in-default-filters">
+<h2>Built-in default filters<a class="headerlink" href="#built-in-default-filters" title="Permalink to this heading">¶</a></h2>
+<p>Filters are implemented for each contributed backend individually. The following filter classes are implemented for
+most or all backends:</p>
+</section>
+<section id="basefilter">
+<h2><a class="reference internal" href="#flask_restone._BaseFilter" title="flask_restone._BaseFilter"><code class="xref py py-class docutils literal notranslate"><span class="pre">_BaseFilter</span></code></a><a class="headerlink" href="#basefilter" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone._BaseFilter">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">_BaseFilter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attribute</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone._BaseFilter" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><dl class="simple">
+<dt>_BaseFilter is used for registering sub-classes of filters, including:</dt><dd><ul class="simple">
+<li><p>lt: LessThan</p></li>
+<li><p>gt: GreatThan</p></li>
+<li><p>eq: Equal</p></li>
+<li><p>ne: NotEqual</p></li>
+<li><p>le: LessThanEqual</p></li>
+<li><p>ge: GreatThanEqual</p></li>
+<li><p>in: In</p></li>
+<li><p>ni: NotIn</p></li>
+<li><p>ha: Has</p></li>
+<li><p>ct: Contain</p></li>
+<li><p>ci: ContainIgnoreCase</p></li>
+<li><p>sw: Startswith</p></li>
+<li><p>si: StartswithIgnoreCase</p></li>
+<li><p>ew: Endswith</p></li>
+<li><p>ei: EndswithIgnoreCase</p></li>
+<li><p>bt: Between</p></li>
+</ul>
+</dd>
+</dl>
+<p>These sub-classes are not intended to be called outside the module and are registered to the dictionary _BaseFilter.filters for internal usage.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;lt&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span> <span class="o">&lt;</span> <span class="n">b</span><span class="p">)</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;gt&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span> <span class="o">&gt;</span> <span class="n">b</span><span class="p">)</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;eq&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span> <span class="o">==</span> <span class="n">b</span><span class="p">)</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;ne&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span> <span class="o">!=</span> <span class="n">b</span><span class="p">)</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;le&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span> <span class="o">&lt;=</span> <span class="n">b</span><span class="p">)</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;ge&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span> <span class="o">&gt;=</span> <span class="n">b</span><span class="p">)</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;in&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">b</span><span class="p">)</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;ni&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">b</span><span class="p">)</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;ha&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="s2">&quot;__iter__&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">a</span><span class="p">)</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;ct&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span> <span class="ow">and</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">a</span><span class="p">)</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;ci&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span> <span class="ow">and</span> <span class="n">b</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">a</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;sw&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">b</span><span class="p">))</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;si&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">lower</span><span class="p">()))</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;ew&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="n">b</span><span class="p">))</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;ei&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">a</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">lower</span><span class="p">()))</span>
+<span class="n">_BaseFilter</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;bt&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">a</span> <span class="o">&lt;=</span> <span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+</pre></div>
+</div>
+</div></blockquote>
+<dl class="py method">
+<dt class="sig sig-object py" id="flask_restone._BaseFilter.register">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">func</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone._BaseFilter.register" title="Permalink to this definition">¶</a></dt>
+<dd><p>Register a virtual subclass of an ABC.</p>
+<p>Returns the subclass, to allow usage as a class decorator.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="sqlalchemyfilter">
+<h2><a class="reference internal" href="#flask_restone._SQLAlchemyFilter" title="flask_restone._SQLAlchemyFilter"><code class="xref py py-class docutils literal notranslate"><span class="pre">_SQLAlchemyFilter</span></code></a><a class="headerlink" href="#sqlalchemyfilter" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="flask_restone._SQLAlchemyFilter">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">flask_restone.</span></span><span class="sig-name descname"><span class="pre">_SQLAlchemyFilter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attribute</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#flask_restone._SQLAlchemyFilter" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>_SQLAlchemyFilter.register(“eq”, lambda c, v: c == v)  # 隐式的创建过滤器
+_SQLAlchemyFilter.register(“ne”, lambda c, v: c != v)
+_SQLAlchemyFilter.register(“lt”, lambda c, v: c &lt; v)
+_SQLAlchemyFilter.register(“le”, lambda c, v: c &lt;= v)
+_SQLAlchemyFilter.register(“gt”, lambda c, v: c &gt; v)
+_SQLAlchemyFilter.register(“ge”, lambda c, v: c &gt;= v)
+_SQLAlchemyFilter.register(“in”, lambda c, v: c.in_(v) if len(v) else False)
+_SQLAlchemyFilter.register(“ni”, lambda c, v: c.notin_(v) if len(v) else True)
+_SQLAlchemyFilter.register(“ha”, lambda c, v: c.contains(v))
+_SQLAlchemyFilter.register(“ct”, lambda c, v: c.like(“%” + v.replace(“%”, “\%”) + “%”))
+_SQLAlchemyFilter.register(“ci”, lambda c, v: c.ilike(“%” + v.replace(“%”, “\%”) + “%”))
+_SQLAlchemyFilter.register(“sw”, lambda c, v: c.startswith(v.replace(“%”, “\%”)))
+_SQLAlchemyFilter.register(“si”, lambda c, v: c.ilike(v.replace(“%”, “\%”) + “%”))
+_SQLAlchemyFilter.register(“ew”, lambda c, v: c.endswith(v.replace(“%”, “\%”)))
+_SQLAlchemyFilter.register(“ei”, lambda c, v: c.ilike(“%” + v.replace(“%”, “\%”)))
+_SQLAlchemyFilter.register(“bt”, lambda c, v: c.between(v[0], v[1]))</p>
+</div></blockquote>
+</dd></dl>
+
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>you can write an equality comparison both ways:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>GET /user?where={&quot;name&quot;: &quot;foo&quot;}
+GET /user?where={&quot;name&quot;: {&quot;$eq&quot;: &quot;foo&quot;}}
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Filters</a><ul>
+<li><a class="reference internal" href="#filter-expressions">Filter expressions</a></li>
+<li><a class="reference internal" href="#built-in-default-filters">Built-in default filters</a></li>
+<li><a class="reference internal" href="#basefilter"><code class="xref py py-class docutils literal notranslate"><span class="pre">_BaseFilter</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone._BaseFilter"><code class="docutils literal notranslate"><span class="pre">_BaseFilter</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone._BaseFilter.register"><code class="docutils literal notranslate"><span class="pre">_BaseFilter.register()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#sqlalchemyfilter"><code class="xref py py-class docutils literal notranslate"><span class="pre">_SQLAlchemyFilter</span></code></a><ul>
+<li><a class="reference internal" href="#flask_restone._SQLAlchemyFilter"><code class="docutils literal notranslate"><span class="pre">_SQLAlchemyFilter</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  </div><h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="fields.html" title="previous chapter">Field types</a></li>
+      <li>Next: <a href="api.html" title="next chapter"><code class="xref py py-class docutils literal notranslate"><span class="pre">Api</span></code></a></li>
+  </ul></li>
+</ul>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/filters.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+  <div class="footer">
+    &copy; Copyright 2023, Arry Lee.
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a>.
+  </div>
+  
+  </body>
+</html>

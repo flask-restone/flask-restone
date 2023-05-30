@@ -1,0 +1,287 @@
+
+<!DOCTYPE html>
+
+<html lang="EN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>Signals &#8212; Flask-Restone 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/flasky.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Permissions with Flask-Principal" href="permissions.html" />
+    <link rel="prev" title="Managers" href="managers.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head><body>
+  
+  
+
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="permissions.html" title="Permissions with Flask-Principal"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="managers.html" title="Managers"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Flask-Restone 0.1.0 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Signals</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="signals">
+<h1>Signals<a class="headerlink" href="#signals" title="Permalink to this heading">¶</a></h1>
+<p>Restone comes with several <a class="reference external" href="http://pythonhosted.org/blinker/">Blinker</a> signals. The signals can be used to
+pre-process and post-process most parts of the read, create, update cycle.</p>
+<p>Resources using the <code class="xref py py-class docutils literal notranslate"><span class="pre">SQLAlchemyManager</span></code> hook into these signals.</p>
+<p>Signal listeners can edit the item:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@before_create</span><span class="o">.</span><span class="n">connect_via</span><span class="p">(</span><span class="n">ArticleResource</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span> <span class="nf">on_before_create_article</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">item</span><span class="o">.</span><span class="n">author_id</span> <span class="o">=</span> <span class="n">current_user</span><span class="o">.</span><span class="n">id</span>
+</pre></div>
+</div>
+<p>Listeners may also raise exceptions:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@before_create</span><span class="o">.</span><span class="n">connect_via</span><span class="p">(</span><span class="n">ArticleResource</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">def</span> <span class="nf">on_before_create_article</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">if</span> <span class="ow">not</span> <span class="n">current_user</span><span class="o">.</span><span class="n">is_editor</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="k">raise</span> <span class="n">BadRequest</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The better way is:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">ArticleResource</span><span class="p">:</span>
+<span class="gp">... </span>   <span class="k">def</span> <span class="nf">on_before_create</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">item</span><span class="p">):</span>
+<span class="gp">... </span>       <span class="k">if</span> <span class="ow">not</span> <span class="n">current_user</span><span class="o">.</span><span class="n">is_editor</span><span class="p">:</span>
+<span class="gp">... </span>           <span class="k">raise</span> <span class="n">BadRequest</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The complete list of signals:</p>
+<span class="target" id="module-signals"></span><dl class="py class">
+<dt class="sig sig-object py" id="signals.before_create">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">signals.</span></span><span class="sig-name descname"><span class="pre">before_create</span></span><a class="headerlink" href="#signals.before_create" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender</strong> – item resource</p></li>
+<li><p><strong>item</strong> – instance of item</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="signals.after_create">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">signals.</span></span><span class="sig-name descname"><span class="pre">after_create</span></span><a class="headerlink" href="#signals.after_create" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender</strong> – item resource</p></li>
+<li><p><strong>item</strong> – instance of item</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="signals.before_update">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">signals.</span></span><span class="sig-name descname"><span class="pre">before_update</span></span><a class="headerlink" href="#signals.before_update" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender</strong> – item resource</p></li>
+<li><p><strong>item</strong> – instance of item</p></li>
+<li><p><strong>changes</strong> (<em>dict</em>) – dictionary of changes, already parsed</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="signals.after_update">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">signals.</span></span><span class="sig-name descname"><span class="pre">after_update</span></span><a class="headerlink" href="#signals.after_update" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender</strong> – item resource</p></li>
+<li><p><strong>item</strong> – instance of item</p></li>
+<li><p><strong>changes</strong> (<em>dict</em>) – dictionary of changes, already parsed</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="signals.before_delete">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">signals.</span></span><span class="sig-name descname"><span class="pre">before_delete</span></span><a class="headerlink" href="#signals.before_delete" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender</strong> – item resource</p></li>
+<li><p><strong>item</strong> – instance of item</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="signals.after_delete">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">signals.</span></span><span class="sig-name descname"><span class="pre">after_delete</span></span><a class="headerlink" href="#signals.after_delete" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender</strong> – item resource</p></li>
+<li><p><strong>item</strong> – instance of item</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="signals.before_relate">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">signals.</span></span><span class="sig-name descname"><span class="pre">before_relate</span></span><a class="headerlink" href="#signals.before_relate" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender</strong> – parent resource</p></li>
+<li><p><strong>item</strong> – instance of parent item</p></li>
+<li><p><strong>attribute</strong> – name of relationship to child</p></li>
+<li><p><strong>child</strong> – instance of child item</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="signals.after_relate">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">signals.</span></span><span class="sig-name descname"><span class="pre">after_relate</span></span><a class="headerlink" href="#signals.after_relate" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender</strong> – parent resource</p></li>
+<li><p><strong>item</strong> – instance of parent item</p></li>
+<li><p><strong>attribute</strong> – name of relationship to child</p></li>
+<li><p><strong>child</strong> – instance of child item</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="signals.before_remove">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">signals.</span></span><span class="sig-name descname"><span class="pre">before_remove</span></span><a class="headerlink" href="#signals.before_remove" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender</strong> – parent resource</p></li>
+<li><p><strong>item</strong> – instance of parent item</p></li>
+<li><p><strong>attribute</strong> – name of relationship to child</p></li>
+<li><p><strong>child</strong> – instance of child item</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="signals.after_remove">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">signals.</span></span><span class="sig-name descname"><span class="pre">after_remove</span></span><a class="headerlink" href="#signals.after_remove" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender</strong> – parent resource</p></li>
+<li><p><strong>item</strong> – instance of parent item</p></li>
+<li><p><strong>attribute</strong> – name of relationship to child</p></li>
+<li><p><strong>child</strong> – instance of child item</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Relation-related signals are only used by <code class="xref py py-class docutils literal notranslate"><span class="pre">Relation</span></code>, They do not apply to relations created or removed by
+updating an item with <code class="xref py py-class docutils literal notranslate"><span class="pre">Res</span></code> or <code class="xref py py-class docutils literal notranslate"><span class="pre">Many</span></code> fields.</p>
+</div>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Signals</a><ul>
+<li><a class="reference internal" href="#signals.before_create"><code class="docutils literal notranslate"><span class="pre">before_create</span></code></a></li>
+<li><a class="reference internal" href="#signals.after_create"><code class="docutils literal notranslate"><span class="pre">after_create</span></code></a></li>
+<li><a class="reference internal" href="#signals.before_update"><code class="docutils literal notranslate"><span class="pre">before_update</span></code></a></li>
+<li><a class="reference internal" href="#signals.after_update"><code class="docutils literal notranslate"><span class="pre">after_update</span></code></a></li>
+<li><a class="reference internal" href="#signals.before_delete"><code class="docutils literal notranslate"><span class="pre">before_delete</span></code></a></li>
+<li><a class="reference internal" href="#signals.after_delete"><code class="docutils literal notranslate"><span class="pre">after_delete</span></code></a></li>
+<li><a class="reference internal" href="#signals.before_relate"><code class="docutils literal notranslate"><span class="pre">before_relate</span></code></a></li>
+<li><a class="reference internal" href="#signals.after_relate"><code class="docutils literal notranslate"><span class="pre">after_relate</span></code></a></li>
+<li><a class="reference internal" href="#signals.before_remove"><code class="docutils literal notranslate"><span class="pre">before_remove</span></code></a></li>
+<li><a class="reference internal" href="#signals.after_remove"><code class="docutils literal notranslate"><span class="pre">after_remove</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+  </div><h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="managers.html" title="previous chapter">Managers</a></li>
+      <li>Next: <a href="permissions.html" title="next chapter">Permissions with <em>Flask-Principal</em></a></li>
+  </ul></li>
+</ul>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/signals.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+  <div class="footer">
+    &copy; Copyright 2023, Arry Lee.
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a>.
+  </div>
+  
+  </body>
+</html>

@@ -1,0 +1,196 @@
+
+<!DOCTYPE html>
+
+<html lang="EN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+    <title>Flask-Restone &#8212; Flask-Restone 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/flasky.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation" href="installation.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head><body>
+  
+  
+  <div class=indexwrapper>
+  
+
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="installation.html" title="Installation"
+             accesskey="N">next</a> |</li>
+        <li class="nav-item nav-item-0"><a href="#">Flask-Restone 0.1.0 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Flask-Restone</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <img alt="Flask-Restone" class="align-center" src="_images/logo.png" />
+<section id="flask-restone">
+<h1>Flask-Restone<a class="headerlink" href="#flask-restone" title="Permalink to this heading">¶</a></h1>
+<p><strong>Flask-Restone</strong> is a powerful Flask extension for building RESTful JSON APIs.
+Restone features include validation, model resources and routes, relations, object permissions, filtering, sorting,
+pagination, signals, and automatic API schema generation.</p>
+<p>Restone ships with backends for SQLAlchemy models.
+It is possible to add backends for other data stores, or even to use a subset of Restone without any data store at all.</p>
+<section id="user-s-guide">
+<h2>User’s guide<a class="headerlink" href="#user-s-guide" title="Permalink to this heading">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#meta-class-attributes"><code class="xref py py-class docutils literal notranslate"><span class="pre">Meta</span></code> class attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#schema-class-attributes"><code class="xref py py-class docutils literal notranslate"><span class="pre">Schema</span></code> class attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#relationships">Relationships</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#filtering-sorting">Filtering &amp; Sorting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#pagination">Pagination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#routes">routes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#route-sets-mixins">route Sets &amp; Mixins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#self-documenting-api">Self-documenting API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#next-steps">Next steps…</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="fields.html">Field types</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="fields.html#field-field-class"><code class="xref py py-class docutils literal notranslate"><span class="pre">Field</span></code> field class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html#reference-field-types">Reference field types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html#basic-field-types">Basic field types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html#composite-field-types">Composite field types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html#sqlalchemy-specific-field-types">SQLAlchemy-specific field types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html#internal-types">Internal types</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="filters.html">Filters</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="filters.html#filter-expressions">Filter expressions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="filters.html#built-in-default-filters">Built-in default filters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="filters.html#basefilter"><code class="xref py py-class docutils literal notranslate"><span class="pre">_BaseFilter</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="filters.html#sqlalchemyfilter"><code class="xref py py-class docutils literal notranslate"><span class="pre">_SQLAlchemyFilter</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html"><code class="xref py py-class docutils literal notranslate"><span class="pre">Api</span></code></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api.html#flask_restone.Api"><code class="docutils literal notranslate"><span class="pre">Api</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="routes.html">Routes &amp; Route Sets</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="routes.html#module-flask_restone"><code class="xref py py-class docutils literal notranslate"><span class="pre">route</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="routes.html#itemroute"><code class="xref py py-class docutils literal notranslate"><span class="pre">itemroute</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="routes.html#relation"><code class="xref py py-class docutils literal notranslate"><span class="pre">Relation</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="routes.html#attrroute"><code class="xref py py-class docutils literal notranslate"><span class="pre">AttrRoute</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="routes.html#taskroute"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskRoute</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="resources.html">Resources</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="resources.html#resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">Resource</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="resources.html#modelresource"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelResource</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="managers.html">Managers</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="managers.html#module-flask_restone">Manager base class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="managers.html#manager-implementations">Manager implementations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="signals.html">Signals</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="signals.html#signals.before_create"><code class="docutils literal notranslate"><span class="pre">before_create</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="signals.html#signals.after_create"><code class="docutils literal notranslate"><span class="pre">after_create</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="signals.html#signals.before_update"><code class="docutils literal notranslate"><span class="pre">before_update</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="signals.html#signals.after_update"><code class="docutils literal notranslate"><span class="pre">after_update</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="signals.html#signals.before_delete"><code class="docutils literal notranslate"><span class="pre">before_delete</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="signals.html#signals.after_delete"><code class="docutils literal notranslate"><span class="pre">after_delete</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="signals.html#signals.before_relate"><code class="docutils literal notranslate"><span class="pre">before_relate</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="signals.html#signals.after_relate"><code class="docutils literal notranslate"><span class="pre">after_relate</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="signals.html#signals.before_remove"><code class="docutils literal notranslate"><span class="pre">before_remove</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="signals.html#signals.after_remove"><code class="docutils literal notranslate"><span class="pre">after_remove</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="permissions.html">Permissions with <em>Flask-Principal</em></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="permissions.html#defining-permissions">Defining Permissions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="permissions.html#example-api-with-permissions">Example API with permissions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="permissions.html#need-class"><code class="xref py py-class docutils literal notranslate"><span class="pre">Need</span></code> class</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="recipes.html">Advanced Recipes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="recipes.html#historymixin">HistoryMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="recipes.html#archivingresource">ArchivingResource</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="#">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Flask-Restone</a><ul>
+<li><a class="reference internal" href="#user-s-guide">User’s guide</a></li>
+</ul>
+</li>
+</ul>
+
+  </div><h3>Related Topics</h3>
+<ul>
+  <li><a href="#">Documentation overview</a><ul>
+      <li>Next: <a href="installation.html" title="next chapter">Installation</a></li>
+  </ul></li>
+</ul>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+  <div class="footer">
+    &copy; Copyright 2023, Arry Lee.
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a>.
+  </div>
+  
+  </div>
+  
+  </body>
+</html>

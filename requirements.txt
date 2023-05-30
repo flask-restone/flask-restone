@@ -7,4 +7,4 @@ flask_principal==0.4.0
 flask_sqlalchemy==3.0.3
 jsonschema==4.17.3
 SQLAlchemy==2.0.15
-Werkzeug==2.3.4
+Werkzeug==2.2.3
